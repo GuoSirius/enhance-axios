@@ -128,9 +128,13 @@ interface CancelRequestConfig {
 ## 已完成 ✅
 - [x] 配置归一化 - 支持多格式输入 (bool/string/function/array/number)
 - [x] 新增 Retry 重试扩展
+- [x] 拦截器逻辑注释完善
 
-### 待完成
-- [ ] 更新 README
+### 拦截器逻辑说明（已添加到源码中）
+- 请求生命周期流程图
+- 失败场景分析表（HTTP状态码 vs 是否重试）
+- 清理逻辑说明表
+- 业务码异常重试的自定义方式说明
 
 扩展功能的配置键（preventDuplicate、cancelRequest、retry）遵循以下约定：
 
