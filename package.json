@@ -15,22 +15,22 @@
       "import": "./dist/esm/index.js"
     },
     "./esm/min": {
-      "import": "./dist/esm/min/index.min.js"
+      "import": "./dist/esm/min/index.mjs"
     },
     "./cjs": {
       "require": "./dist/cjs/index.js"
     },
     "./cjs/min": {
-      "require": "./dist/cjs/min/index.min.js"
+      "require": "./dist/cjs/min/index.js"
     },
     "./iife": {
-      "default": "./dist/iife/index.js"
+      "default": "./dist/iife/index.global.js"
     },
     "./iife/min": {
-      "default": "./dist/iife/min/index.min.js"
+      "default": "./dist/iife/min/index.global.js"
     }
   },
-  "unpkg": "dist/iife/min/index.min.js",
+  "unpkg": "dist/iife/min/index.global.js",
   "files": [
     "dist"
   ],
@@ -41,7 +41,13 @@
     "test": "vitest run",
     "lint": "eslint src"
   },
-  "keywords": ["axios", "http", "request", "prevent-duplicate", "cancel-request"],
+  "keywords": [
+    "axios",
+    "http",
+    "request",
+    "prevent-duplicate",
+    "cancel-request"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
@@ -50,13 +56,13 @@
     "axios": ">=1.7.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
     "axios": "^1.7.0",
+    "eslint": "^9.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.0.0",
-    "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "vitest": "^2.0.0"
   }
 }
