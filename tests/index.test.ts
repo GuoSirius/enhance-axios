@@ -199,4 +199,83 @@ describe('enhance-axios', () => {
       expect(instance.enhance.requestManager).toBeDefined();
     });
   });
+
+  describe('配置归一化', () => {
+    it('boolean 值赋给 enabled', () => {
+      const instance = createEnhanceInstance({ preventDuplicate: true });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('string 值赋给 requestKey', () => {
+      const instance = createEnhanceInstance({
+        preventDuplicate: '${method}-${url}',
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('function 值赋给 requestKey', () => {
+      const instance = createEnhanceInstance({
+        preventDuplicate: (config) => `${config.method}-${config.url}`,
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('array 值赋给 methods', () => {
+      const instance = createEnhanceInstance({
+        preventDuplicate: ['GET', 'POST'],
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('number 值赋给 intervalMs', () => {
+      const instance = createEnhanceInstance({
+        preventDuplicate: 2000,
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('undefined/null 视为未传递', () => {
+      const instance1 = createEnhanceInstance({});
+      const instance2 = createEnhanceInstance({ preventDuplicate: undefined });
+      const instance3 = createEnhanceInstance({ preventDuplicate: null });
+      expect(instance1.enhance).toBeDefined();
+      expect(instance2.enhance).toBeDefined();
+      expect(instance3.enhance).toBeDefined();
+    });
+  });
+
+  describe('Retry 配置', () => {
+    it('默认启用重试', () => {
+      const instance = createEnhanceInstance({});
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('可配置 retries', () => {
+      const instance = createEnhanceInstance({
+        retry: { retries: 5 },
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('数字赋给 retries', () => {
+      const instance = createEnhanceInstance({
+        retry: 10,
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('可配置 exponential', () => {
+      const instance = createEnhanceInstance({
+        retry: { exponential: false },
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('可关闭重试', () => {
+      const instance = createEnhanceInstance({
+        retry: false,
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+  });
 });

@@ -69,16 +69,23 @@ function sortObject(obj: any): any {
 
 /**
  * 解析 requestKey
- * 支持字符串模板和直接字符串
+ * 支持字符串模板、直接字符串、函数
  */
-export function resolveRequestKey(config: AxiosRequestConfig, keyTemplate?: string): string {
+export function resolveRequestKey(config: AxiosRequestConfig, keyTemplate?: any): string {
   if (!keyTemplate) {
     return generateDefaultKey(config);
   }
+
+  // 函数类型
+  if (typeof keyTemplate === 'function') {
+    return keyTemplate(config);
+  }
+
   // 如果包含 ${ 则作为模板解析
-  if (keyTemplate.includes('${')) {
+  if (typeof keyTemplate === 'string' && keyTemplate.includes('${')) {
     return resolveTemplate(keyTemplate, config);
   }
+
   // 直接返回字符串
   return keyTemplate;
 }
