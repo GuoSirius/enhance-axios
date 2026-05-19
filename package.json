@@ -1,18 +1,18 @@
 {
   "name": "enhance-axios",
   "version": "1.0.0",
-  "description": "axios 增强库，支持防重复提交和取消请求",
+  "description": "axios 增强库，支持防重复提交、取消请求和失败重试",
   "main": "dist/cjs/index.js",
-  "module": "dist/esm/index.js",
+  "module": "dist/esm/index.mjs",
   "types": "dist/cjs/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/cjs/index.d.ts",
-      "import": "./dist/esm/index.js",
+      "import": "./dist/esm/index.mjs",
       "require": "./dist/cjs/index.js"
     },
     "./esm": {
-      "import": "./dist/esm/index.js"
+      "import": "./dist/esm/index.mjs"
     },
     "./esm/min": {
       "import": "./dist/esm/min/index.mjs"
@@ -37,6 +37,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "example": "tsup && node example/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src"
@@ -46,7 +47,8 @@
     "http",
     "request",
     "prevent-duplicate",
-    "cancel-request"
+    "cancel-request",
+    "retry"
   ],
   "license": "MIT",
   "engines": {

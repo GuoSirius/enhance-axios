@@ -1,11 +1,12 @@
 # enhance-axios
 
-一个强大的 axios 增强库，支持防重复提交和取消请求功能。
+一个强大的 axios 增强库，支持防重复提交、取消请求和失败重试功能。
 
 ## 特性
 
 - **防重复提交**：快速多次点击时保持第一次请求，忽略后续重复请求
 - **取消请求**：搜索类场景，多次发送时自动取消旧请求，保留最新请求
+- **失败重试**：自动重试失败的请求，支持指数退避策略
 - **配置灵活**：支持实例级别和请求级别的配置
 - **requestKey 模板**：支持 `${method}`、`${url}`、`${data.xxx}` 等占位符
 - **类型安全**：完整的 TypeScript 支持
@@ -25,10 +26,13 @@ yarn add enhance-axios
 pnpm add enhance-axios
 ```
 
+> 注意：`enhance-axios` 依赖 `axios >= 1.7.0`，请确保项目已安装 axios
+
 ## 快速开始
 
 ```typescript
 import { createEnhanceInstance } from 'enhance-axios';
+import axios from 'axios';  // 需要安装 axios
 
 const api = createEnhanceInstance({ baseURL: '/api' });
 
@@ -41,6 +45,11 @@ api.post('/submit', { name: 'test' }, {
 api.get('/search', { q: 'keyword' }, {
   cancelRequest: { requestKey: 'search-query' }
 });
+
+// 失败重试（自动重试失败的请求）
+api.get('/data', null, {
+  retry: { retries: 3, retryDelay: 1000 }
+});
 ```
 
 ## API 使用
@@ -51,13 +60,21 @@ api.get('/search', { q: 'keyword' }, {
 
 ```typescript
 import { createEnhanceInstance } from 'enhance-axios';
+import axios from 'axios';
 
 const api = createEnhanceInstance({
   baseURL: '/api',
   timeout: 10000,
-  // 实例级别配置（默认开启）
+  // 实例级别配置
   preventDuplicate: true,
   cancelRequest: true,
+  retry: {
+    retries: 3,
+    retryDelay: 1000,
+    maxDelay: 30000,
+    exponential: true,
+    statusCodes: [408, 429, 500, 502, 503, 504]
+  }
 });
 ```
 
@@ -72,7 +89,8 @@ api({
   method: 'POST',
   data: { name: 'test' },
   preventDuplicate: { requestKey: 'submit-form' },
-  cancelRequest: false
+  cancelRequest: false,
+  retry: false
 });
 
 // 方式2：RESTful 方法
@@ -92,8 +110,8 @@ api.delete('/user/123', { force: true }, { cancelRequest: true });
 ```typescript
 {
   enabled?: boolean;      // 默认 true
-  requestKey?: string;     // 字符串模板，支持 ${method}、${url}、${data.xxx} 等
-  methods?: string[];      // 生效的请求方法，默认全部
+  requestKey?: string;   // 字符串模板，支持 ${method}、${url}、${data.xxx} 等
+  methods?: string[];     // 生效的请求方法，默认全部
   intervalMs?: number;    // 重复判定间隔(ms)，默认 1000
 }
 
@@ -117,7 +135,7 @@ api.post('/submit', data, { preventDuplicate: false });  // 关闭
 ```typescript
 {
   enabled?: boolean;      // 默认 true
-  requestKey?: string;     // 字符串模板，支持 ${method}、${url}、${params.xxx} 等
+  requestKey?: string;    // 字符串模板，支持 ${method}、${url}、${params.xxx} 等
   methods?: string[];      // 生效的请求方法，默认全部
 }
 
@@ -133,6 +151,49 @@ api.get('/search', { q: 'keyword' }, {
 // 简写
 api.get('/search', { q: 'keyword' }, { cancelRequest: true });
 api.get('/search', { q: 'keyword' }, { cancelRequest: false });  // 关闭
+```
+
+### 失败重试 (retry)
+
+```typescript
+{
+  enabled?: boolean;           // 默认 true
+  retries?: number;           // 重试次数，默认 3
+  retryDelay?: number;       // 初始延迟(ms)，默认 1000
+  maxDelay?: number;         // 最大延迟(ms)，默认 30000
+  exponential?: boolean;     // 指数退避，默认 true
+  statusCodes?: number[];    // 需要重试的 HTTP 状态码
+  methods?: string[];        // 生效的请求方法，默认全部
+  retryCondition?: (error: AxiosError) => boolean;  // 自定义重试条件
+}
+
+// 示例：基础重试
+api.get('/data', null, {
+  retry: {
+    enabled: true,
+    retries: 3,
+    retryDelay: 1000,
+    exponential: true
+  }
+});
+
+// 示例：自定义重试条件（业务码异常也重试）
+api.get('/api/action', null, {
+  retry: {
+    enabled: true,
+    retries: 2,
+    retryCondition: (error) => {
+      // HTTP 500 或业务码非0都重试
+      if (!error.response || error.response.status >= 500) return true;
+      if (error.response?.status === 200 && error.response?.data?.code !== 0) return true;
+      return false;
+    }
+  }
+});
+
+// 简写
+api.get('/data', null, { retry: true });
+api.get('/data', null, { retry: false });  // 关闭
 ```
 
 ### requestKey 模板
@@ -184,33 +245,73 @@ const manager = api.enhance.requestManager;
 const api1 = createEnhanceInstance({
   baseURL: '/api',
   preventDuplicate: false,
-  cancelRequest: false
+  cancelRequest: false,
+  retry: false
 });
 
 // 配置默认值
 const api2 = createEnhanceInstance({
   baseURL: '/api',
   preventDuplicate: { intervalMs: 2000 },
-  cancelRequest: { methods: ['GET'] }
+  cancelRequest: { methods: ['GET'] },
+  retry: { retries: 3, exponential: true }
 });
 ```
 
 ## 构建输出
 
-| 格式 | 非压缩 | 压缩版 | 用途 |
-|------|--------|--------|------|
-| ESM | `dist/esm/index.js` | `dist/esm/min/index.mjs` | ES Module 环境 |
-| CJS | `dist/cjs/index.js` | `dist/cjs/min/index.js` | CommonJS 环境 |
-| IIFE | `dist/iife/index.global.js` | `dist/iife/min/index.global.js` | 浏览器直接引用 |
+| 格式 | 文件 | 说明 |
+|------|------|------|
+| ESM | `dist/esm/index.mjs` | ES Module 环境 |
+| ESM Min | `dist/esm/min/index.mjs` | ES Module 压缩版 |
+| CJS | `dist/cjs/index.js` | CommonJS 环境 |
+| CJS Min | `dist/cjs/min/index.js` | CommonJS 压缩版 |
+| IIFE | `dist/iife/index.global.js` | 浏览器直接引用 |
+| IIFE Min | `dist/iife/min/index.global.js` | 浏览器压缩版 |
 
-### CDN 使用
+> 所有格式都需要外部安装/加载 axios 作为依赖
+
+### CDN 使用（浏览器直接引用）
 
 ```html
-<!-- 压缩版 (推荐) -->
+<!-- 1. 先加载 axios -->
+<script src="https://unpkg.com/axios@1/dist/axios.min.js"></script>
+
+<!-- 2. 再加载 enhance-axios -->
 <script src="https://unpkg.com/enhance-axios@latest/dist/iife/min/index.global.js"></script>
 
-<!-- 非压缩版 (开发调试) -->
-<script src="https://unpkg.com/enhance-axios@latest/dist/iife/index.global.js"></script>
+<script>
+  const api = EnhanceAxios.createEnhanceInstance({ baseURL: '/api' });
+  api.get('/data').then(console.log);
+</script>
+```
+
+### ESM 使用
+
+```html
+<script type="module">
+  // 需要先 npm install axios
+  import { createEnhanceInstance } from 'https://unpkg.com/enhance-axios@latest/dist/esm/index.mjs';
+
+  const api = createEnhanceInstance({ baseURL: '/api' });
+  api.get('/data').then(console.log);
+</script>
+```
+
+### npm 包导入
+
+```typescript
+// 默认导入 (推荐)
+// 需要先 npm install axios
+import { createEnhanceInstance } from 'enhance-axios';
+
+// ESM 格式
+import { createEnhanceInstance } from 'enhance-axios/esm';
+import { createEnhanceInstance } from 'enhance-axios/esm/min';
+
+// CJS 格式
+const { createEnhanceInstance } = require('enhance-axios/cjs');
+const { createEnhanceInstance } = require('enhance-axios/cjs/min');
 ```
 
 ## 类型
@@ -218,9 +319,11 @@ const api2 = createEnhanceInstance({
 ```typescript
 import {
   createEnhanceInstance,
+  type CreateEnhanceOptions,
+  type EnhanceInstance,
   type PreventDuplicateConfig,
   type CancelRequestConfig,
-  type EnhanceInstance
+  type AxiosRequestConfig
 } from 'enhance-axios';
 ```
 

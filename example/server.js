@@ -11,6 +11,17 @@ const mockApi = require('./mock-api');
 
 const PORT = 3000;
 
+const MIME_TYPES = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.mjs': 'application/javascript',
+  '.cjs': 'application/javascript',
+  '.json': 'application/json',
+  '.css': 'text/css',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+};
+
 const server = http.createServer((req, res) => {
   // CORS 允许跨域
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,7 +37,25 @@ const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = parsed.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
 
-  // 静态文件服务
+  // 静态文件服务 - 支持 ../dist/ 和 ../node_modules/ 目录
+  if (pathname.startsWith('dist/') || pathname.startsWith('node_modules/')) {
+    const staticPath = path.join(__dirname, '..', pathname);
+    const ext = path.extname(staticPath);
+    const contentType = MIME_TYPES[ext] || 'application/javascript';
+
+    fs.readFile(staticPath, (err, data) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found: ' + pathname);
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': contentType });
+      res.end(data);
+    });
+    return;
+  }
+
+  // 根路径重定向到 index.html
   if (pathname === '' || pathname === 'index.html') {
     const htmlPath = path.join(__dirname, 'index.html');
     fs.readFile(htmlPath, 'utf-8', (err, data) => {
