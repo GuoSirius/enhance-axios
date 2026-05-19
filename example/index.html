@@ -14,8 +14,8 @@ h1 { color: #e94560; margin-bottom: 5px; }
 .stat-num { color: #e94560; font-weight: bold; }
 .container { display: flex; gap: 20px; }
 .panel { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 16px; }
-.left { width: 300px; }
-.right { flex: 1; }
+.left { width: 300px; flex-shrink: 0; }
+.right { flex: 1; display: flex; flex-direction: column; }
 .section { margin-bottom: 16px; }
 .section-title { font-size: 14px; font-weight: bold; color: #e94560; margin-bottom: 8px; }
 .label { font-size: 12px; color: #aaa; margin: 6px 0 3px; }
@@ -29,20 +29,22 @@ button:hover { opacity: 0.9; }
 .btn-success { background: #27ae60; color: #fff; }
 .btn-warning { background: #e67e22; color: #fff; }
 .btn-danger { background: #c0392b; color: #fff; }
-.log-area { background: #0a0a1a; border-radius: 6px; padding: 12px; height: 400px; overflow-y: auto; margin-top: 16px; font-size: 12px; }
-.log-entry { margin-bottom: 4px; padding: 4px; border-radius: 3px; display: flex; gap: 10px; }
-.log-entry:hover { background: #1a1a3e; }
-.log-time { color: #666; }
-.log-method { color: #3498db; min-width: 50px; }
-.log-url { flex: 1; }
-.log-status { min-width: 150px; text-align: right; }
-.log-status.success { color: #27ae60; }
-.log-status.error { color: #e74c3c; }
-.log-status.cancel { color: #e67e22; }
-.log-status.retry { color: #3498db; }
-.log-status.duplicate { color: #9b59b6; }
-.loading { color: #e67e22; }
-.error { color: #e74c3c; }
+.log-area { background: #0a0a1a; border-radius: 6px; padding: 12px; height: 500px; overflow-y: auto; margin-top: 16px; font-size: 12px; line-height: 1.8; }
+.log-line { padding: 1px 4px; white-space: nowrap; }
+.log-line:hover { background: #1a1a3e; }
+.log-time { color: #555; margin-right: 8px; }
+.log-tag { display: inline-block; padding: 0 4px; border-radius: 2px; font-size: 10px; font-weight: bold; margin-right: 4px; }
+.log-tag.send  { color: #3498db; border: 1px solid #3498db; }
+.log-tag.ok    { color: #27ae60; border: 1px solid #27ae60; }
+.log-tag.reuse { color: #9b59b6; border: 1px solid #9b59b6; }
+.log-tag.retry { color: #f39c12; border: 1px solid #f39c12; }
+.log-tag.cancel{ color: #e67e22; border: 1px solid #e67e22; }
+.log-tag.fail  { color: #e74c3c; border: 1px solid #e74c3c; }
+.log-tag.info  { color: #888; border: 1px solid #888; }
+.log-id { color: #666; margin-right: 6px; }
+.log-detail { color: #aaa; }
+.log-group { margin-bottom: 8px; border: 1px solid #0f3460; border-radius: 4px; overflow: hidden; }
+.log-group-hd { background: #0f3460; color: #aaa; font-size: 11px; padding: 2px 8px; }
 </style>
 </head>
 <body>
@@ -50,103 +52,108 @@ button:hover { opacity: 0.9; }
 <p class="subtitle">防重复提交 · 取消请求 · 失败重试</p>
 
 <div class="stats">
-  <span>请求: <span class="stat-num" id="stat-total">0</span></span>
-  <span>成功: <span class="stat-num" id="stat-ok">0</span></span>
-  <span>重试: <span class="stat-num" id="stat-retry">0</span></span>
-  <span>取消: <span class="stat-num" id="stat-cancel">0</span></span>
+  <span>发送: <span class="stat-num" id="st-send">0</span></span>
+  <span>完成: <span class="stat-num" id="st-ok">0</span></span>
+  <span>复用: <span class="stat-num" id="st-reuse">0</span></span>
+  <span>重试: <span class="stat-num" id="st-retry">0</span></span>
+  <span>取消: <span class="stat-num" id="st-cancel">0</span></span>
+  <span>失败: <span class="stat-num" id="st-fail">0</span></span>
 </div>
 
 <div class="container">
-  <div class="panel left">
-    <div class="section">
-      <div class="section-title">实例配置</div>
-      <div class="form-row">
-        <label class="label">Base URL</label>
-        <input type="text" id="baseUrl" value="http://localhost:3000/api">
-      </div>
-      <div class="form-row">
-        <label class="label">Timeout (ms)</label>
-        <input type="number" id="timeout" value="10000">
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">防重复提交</div>
-      <div class="form-row"><label><input type="checkbox" id="prevent-enabled" checked> Enabled</label></div>
-      <div class="form-row">
-        <label class="label">requestKey</label>
-        <input type="text" id="prevent-key" value="${method}-${url}">
-      </div>
-      <div class="form-row">
-        <label class="label">intervalMs</label>
-        <input type="number" id="prevent-interval" value="2000">
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">取消请求</div>
-      <div class="form-row"><label><input type="checkbox" id="cancel-enabled" checked> Enabled</label></div>
-      <div class="form-row">
-        <label class="label">requestKey</label>
-        <input type="text" id="cancel-key" value="${method}-${url}">
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">失败重试</div>
-      <div class="form-row"><label><input type="checkbox" id="retry-enabled" checked> Enabled</label></div>
-      <div class="form-row">
-        <label class="label">retries</label>
-        <input type="number" id="retry-count" value="3">
-      </div>
-      <div class="form-row">
-        <label class="label">retryDelay (ms)</label>
-        <input type="number" id="retry-delay" value="1000">
-      </div>
-    </div>
-
-    <button class="btn-primary" onclick="rebuildInstance()">重新创建实例</button>
+<div class="panel left">
+  <div class="section">
+    <div class="section-title">实例配置</div>
+    <div class="form-row"><label class="label">Base URL</label><input type="text" id="baseUrl" value="http://localhost:3000"></div>
+    <div class="form-row"><label class="label">Timeout (ms)</label><input type="number" id="timeout" value="10000"></div>
   </div>
-
-  <div class="panel right">
-    <div class="section-title">测试操作</div>
-    <button class="btn-primary" onclick="testPreventDuplicate()">防重复 (连发5次)</button>
-    <button class="btn-warning" onclick="testCancelRequest()">取消请求 (连发5次)</button>
-    <button class="btn-success" onclick="testRetry()">重试 (50%失败)</button>
-    <button class="btn-danger" onclick="testServer500()">500错误</button>
-    <button class="btn-primary" onclick="testSingle()">单次请求</button>
-    <button class="btn-danger" onclick="clearLog()">清空日志</button>
-
-    <div class="log-area" id="logArea">
-      <div class="loading">正在加载 enhance-axios...</div>
-    </div>
+  <div class="section">
+    <div class="section-title">防重复提交</div>
+    <div class="form-row"><label><input type="checkbox" id="prevent-enabled" checked> Enabled</label></div>
+    <div class="form-row"><label class="label">requestKey</label><input type="text" id="prevent-key" value="${method}-${url}"></div>
+    <div class="form-row"><label class="label">intervalMs</label><input type="number" id="prevent-interval" value="2000"></div>
   </div>
+  <div class="section">
+    <div class="section-title">取消请求</div>
+    <div class="form-row"><label><input type="checkbox" id="cancel-enabled" checked> Enabled</label></div>
+    <div class="form-row"><label class="label">requestKey</label><input type="text" id="cancel-key" value="${method}-${url}"></div>
+  </div>
+  <div class="section">
+    <div class="section-title">失败重试</div>
+    <div class="form-row"><label><input type="checkbox" id="retry-enabled" checked> Enabled</label></div>
+    <div class="form-row"><label class="label">retries</label><input type="number" id="retry-count" value="3"></div>
+    <div class="form-row"><label class="label">retryDelay (ms)</label><input type="number" id="retry-delay" value="1000"></div>
+  </div>
+  <button class="btn-primary" onclick="rebuild()">重新创建实例</button>
 </div>
 
-<!-- 先加载 axios -->
+<div class="panel right">
+  <div class="section-title">测试操作</div>
+  <button class="btn-primary" onclick="testPrevent()">防重复: 连发5次</button>
+  <button class="btn-warning" onclick="testCancel()">取消请求: 连发5次</button>
+  <button class="btn-success" onclick="testRetry()">重试: 50%失败</button>
+  <button class="btn-danger"  onclick="test500()">500错误: 重试3次</button>
+  <button class="btn-primary" onclick="testSingle()">单次请求</button>
+  <button style="background:#555;color:#fff" onclick="clearLog()">清空</button>
+  <div class="log-area" id="logArea"></div>
+</div>
+</div>
+
 <script src="../node_modules/axios/dist/axios.min.js"></script>
-<!-- 再加载 enhance-axios -->
 <script src="../dist/iife/index.global.js"></script>
 
 <script>
-// 全局状态
-var apiInstance = null;
-var stats = { total: 0, ok: 0, retry: 0, cancel: 0 };
+var api = null;
+var reqSeq = 0;
+var activeGroup = null;
+var stats = { send:0, ok:0, reuse:0, retry:0, cancel:0, fail:0 };
 
-// 初始化
-function init() {
-  addLog('info', '', 'window.axios 加载: ' + (typeof window.axios !== 'undefined'), 'info');
-  addLog('info', '', 'EnhanceAxios 加载: ' + (typeof window.EnhanceAxios !== 'undefined'), 'info');
+var S='send', O='ok', R='reuse', T='retry', C='cancel', F='fail', I='info';
+var label = { send:'[发送]', ok:'[完成]', reuse:'[复用]', retry:'[重试]', cancel:'[取消]', fail:'[失败]', info:'[信息]' };
+var inc = { send:'send', ok:'ok', reuse:'reuse', retry:'retry', cancel:'cancel', fail:'fail' };
 
-  if (typeof window.EnhanceAxios === 'undefined') {
-    addLog('error', '', 'EnhanceAxios 未定义!', 'error');
-    return;
-  }
-  addLog('success', '', '✅ enhance-axios 已加载 v' + (window.EnhanceAxios.version || ''), 'success');
-  rebuildInstance();
+function group(id, title) {
+  var g = document.createElement('div');
+  g.className = 'log-group';
+  g.innerHTML = '<div class="log-group-hd">#' + id + ' ' + title + '</div>';
+  activeGroup = document.createElement('div');
+  activeGroup.className = 'log-group-body';
+  g.appendChild(activeGroup);
+  var la = document.getElementById('logArea');
+  la.appendChild(g);
+  la.scrollTop = la.scrollHeight;
 }
 
-function rebuildInstance() {
+function log(tag, id, msg) {
+  if (inc[tag] != null) stats[inc[tag]]++;
+  updateStats();
+  var el = document.createElement('div');
+  el.className = 'log-line';
+  el.innerHTML = '<span class="log-time">' + new Date().toLocaleTimeString() + '</span>' +
+    '<span class="log-tag ' + tag + '">' + label[tag] + '</span>' +
+    (id ? '<span class="log-id">#' + id + '</span>' : '') +
+    '<span class="log-detail">' + (msg || '') + '</span>';
+  var target = activeGroup || document.getElementById('logArea');
+  target.appendChild(el);
+  var la = document.getElementById('logArea');
+  la.scrollTop = la.scrollHeight;
+  if (la.children.length > 50) la.firstChild.remove();
+}
+
+function updateStats() {
+  for (var k in inc) {
+    document.getElementById('st-' + k).textContent = stats[inc[k]] || 0;
+  }
+}
+
+function clearLog() {
+  document.getElementById('logArea').innerHTML = '';
+  activeGroup = null;
+  stats = { send:0, ok:0, reuse:0, retry:0, cancel:0, fail:0 };
+  updateStats();
+}
+
+function rebuild() {
   var config = {
     baseURL: document.getElementById('baseUrl').value,
     timeout: parseInt(document.getElementById('timeout').value) || 10000,
@@ -162,129 +169,136 @@ function rebuildInstance() {
       retryDelay: parseInt(document.getElementById('retry-delay').value) || 1000,
     } : false,
   };
+  api = window.EnhanceAxios.createEnhanceInstance(config);
+  group('', '系统');
+  log(I, '', '实例已创建 baseURL=' + config.baseURL);
+}
 
-  try {
-    apiInstance = window.EnhanceAxios.createEnhanceInstance(config);
-    addLog('success', '', '实例创建成功', 'success');
-  } catch (e) {
-    addLog('error', '', '创建失败: ' + e.message, 'error');
+function testPrevent() {
+  if (!api) return;
+  var id = ++reqSeq;
+  group(id, '防重复提交  POST /api/submit  (连发5次，第2-5次被拦截复用)');
+
+  for (var i = 1; i <= 5; i++) {
+    var sub = id + '.' + i;
+    log(S, sub, '发起请求 seq=' + i);
+    (function(seq, subId) {
+      api.post('/api/submit', { name: 'test', seq: seq }, {
+        preventDuplicate: { requestKey: '${method}-${url}', intervalMs: 2000 },
+        cancelRequest: false, retry: false,
+      }).then(function(r) {
+        log(O, subId, '原始请求完成 seq=' + seq);
+      }).catch(function(err) {
+        if (err && err.message && err.message.indexOf('prevented') >= 0) {
+          log(R, subId, '被拦截，复用第1次请求 seq=' + seq);
+        } else {
+          log(F, subId, (err && err.message) || '');
+        }
+      });
+    })(i, sub);
   }
 }
 
-function testPreventDuplicate() {
-  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
-  addLog('info', 'POST', '/api/submit', '防重复测试: 连发5次');
-  for (var i = 1; i <= 5; i++) {
-    apiInstance.post('/submit', { name: 'test', seq: i }, {
-      preventDuplicate: { requestKey: '${method}-${url}', intervalMs: 2000 },
-      cancelRequest: false, retry: false,
-    }).then(function(res) {
-      stats.ok++; updateStats();
-      addLog('success', 'POST', '/api/submit', '✅ 成功');
-    }).catch(function(err) {
-      if (err && err.message && err.message.includes('prevented')) {
-        stats.cancel++; updateStats();
-        addLog('duplicate', 'POST', '/api/submit', '⏸️ 被拦截');
-      } else {
-        addLog('error', 'POST', '/api/submit', '❌ ' + (err && err.message || '未知错误'));
-      }
-    });
-  }
-}
+function testCancel() {
+  if (!api) return;
+  var id = ++reqSeq;
+  group(id, '取消请求  GET /api/search  (连发5次，前4次被取消，仅第5次完成)');
 
-function testCancelRequest() {
-  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
-  addLog('info', 'GET', '/api/search', '取消请求测试: 连发5次');
   for (var i = 1; i <= 5; i++) {
-    apiInstance.get('/search', { q: 'keyword-' + i }, {
-      cancelRequest: { requestKey: '${method}-${url}' },
-      preventDuplicate: false, retry: false,
-    }).then(function(res) {
-      stats.ok++; updateStats();
-      addLog('success', 'GET', '/api/search', '✅ 成功');
-    }).catch(function(err) {
-      if (err && err.message && err.message.includes('cancel')) {
-        stats.cancel++; updateStats();
-        addLog('cancel', 'GET', '/api/search', '🚫 被取消');
-      } else {
-        addLog('error', 'GET', '/api/search', '❌ ' + (err && err.message || '未知错误'));
-      }
-    });
+    var sub = id + '.' + i;
+    var kw = 'keyword-' + i;
+    log(S, sub, '发起请求 ?q=' + kw + '  seq=' + i);
+    (function(kw, subId) {
+      api.get('/api/search', { q: kw }, {
+        cancelRequest: { requestKey: '${method}-${url}' },
+        preventDuplicate: false, retry: false,
+      }).then(function(r) {
+        log(O, subId, '完成 ?q=' + kw);
+      }).catch(function(err) {
+        if (err && err.message && err.message.indexOf('cancel') >= 0) {
+          log(C, subId, '被取消 ?q=' + kw);
+        } else {
+          log(F, subId, (err && err.message) || '');
+        }
+      });
+    })(kw, sub);
   }
 }
 
 function testRetry() {
-  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
-  addLog('info', 'GET', '/api/data', '重试测试: 50%失败');
-  apiInstance.get('/data', null, {
-    retry: { retries: 3, retryDelay: 500 },
+  if (!api) return;
+  var id = ++reqSeq;
+  group(id, '重试  GET /api/data  (50%概率返回500)');
+  var retryCount = 0;
+  log(S, id, '发起请求');
+
+  api.get('/api/data', null, {
+    retry: {
+      enabled: true, retries: 3, retryDelay: 500, exponential: true,
+      retryCondition: function(err) {
+        var should = !err.response || err.response.status >= 500;
+        if (should) { retryCount++; log(T, id, '遇到500，第' + retryCount + '次重试...'); }
+        return should;
+      },
+    },
     preventDuplicate: false, cancelRequest: false,
-  }).then(function(res) {
-    stats.ok++; updateStats();
-    addLog('success', 'GET', '/api/data', '✅ 成功');
+  }).then(function(r) {
+    log(O, id, '成功' + (retryCount ? ' (共重试' + retryCount + '次)' : ''));
   }).catch(function(err) {
-    addLog('error', 'GET', '/api/data', '❌ ' + (err && err.message || '未知错误'));
+    log(F, id, '重试耗尽 (共' + retryCount + '次)');
   });
 }
 
-function testServer500() {
-  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
-  addLog('info', 'GET', '/api/error', '500错误测试 (重试3次)');
-  apiInstance.get('/api/error', null, {
-    retry: { retries: 3, retryDelay: 500 },
+function test500() {
+  if (!api) return;
+  var id = ++reqSeq;
+  group(id, '500错误  GET /api/error  (固定500，重试3次)');
+  var retryCount = 0;
+  log(S, id, '发起请求');
+
+  api.get('/api/error', null, {
+    retry: {
+      enabled: true, retries: 3, retryDelay: 500,
+      retryCondition: function(err) {
+        var should = err.response && err.response.status >= 500;
+        if (should) { retryCount++; log(T, id, '第' + retryCount + '次重试...'); }
+        return should;
+      },
+    },
     preventDuplicate: false, cancelRequest: false,
-  }).then(function() {
-    stats.ok++; updateStats();
-    addLog('success', 'GET', '/api/error', '✅ 成功');
+  }).then(function(r) {
+    log(O, id, '成功');
   }).catch(function(err) {
-    addLog('error', 'GET', '/api/error', '❌ 重试耗尽');
+    log(F, id, '重试耗尽 (共' + retryCount + '次)');
   });
 }
 
 function testSingle() {
-  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
-  addLog('info', 'GET', '/api/success', '单次请求测试');
-  apiInstance.get('/api/success', null, {
+  if (!api) return;
+  var id = ++reqSeq;
+  group(id, '单次请求  GET /api/success');
+  log(S, id, '发起请求');
+  api.get('/api/success', null, {
     preventDuplicate: false, cancelRequest: false, retry: false,
-  }).then(function(res) {
-    stats.ok++; updateStats();
-    addLog('success', 'GET', '/api/success', '✅ ' + JSON.stringify(res.data));
+  }).then(function(r) {
+    log(O, id, '完成 ' + JSON.stringify(r.data));
   }).catch(function(err) {
-    addLog('error', 'GET', '/api/success', '❌ ' + (err && err.message || '未知错误'));
+    log(F, id, (err && err.message) || '');
   });
 }
 
-function addLog(method, url, message, status) {
-  stats.total++;
-  updateStats();
-  var logArea = document.getElementById('logArea');
-  var entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML =
-    '<span class="log-time">' + new Date().toLocaleTimeString() + '</span>' +
-    '<span class="log-method">' + method + '</span>' +
-    '<span class="log-url">' + url + '</span>' +
-    '<span class="log-status ' + status + '">' + message + '</span>';
-  logArea.appendChild(entry);
-  logArea.scrollTop = logArea.scrollHeight;
-  if (logArea.children.length > 100) logArea.removeChild(logArea.firstChild);
-}
-
-function clearLog() {
-  document.getElementById('logArea').innerHTML = '';
-  stats = { total: 0, ok: 0, retry: 0, cancel: 0 };
-  updateStats();
-}
-
-function updateStats() {
-  document.getElementById('stat-total').textContent = stats.total;
-  document.getElementById('stat-ok').textContent = stats.ok;
-  document.getElementById('stat-retry').textContent = stats.retry;
-  document.getElementById('stat-cancel').textContent = stats.cancel;
-}
-
-// 页面加载完成后初始化
-window.addEventListener('load', init);
+// 启动
+(function() {
+  group('', '系统');
+  log(I, '', 'axios: ' + (typeof window.axios !== 'undefined'));
+  log(I, '', 'EnhanceAxios: ' + (typeof window.EnhanceAxios !== 'undefined'));
+  if (typeof window.EnhanceAxios !== 'undefined') {
+    log(I, '', '版本: ' + (window.EnhanceAxios.version || ''));
+    rebuild();
+  } else {
+    log(F, '', 'EnhanceAxios 未定义!');
+  }
+})();
 </script>
 </body>
 </html>

@@ -557,7 +557,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): EnhanceInsta
         }
       }
 
-      return originalMethod.call(instance, finalConfig);
+      return (instance as AxiosInstance).request(finalConfig);
     };
   }
 
