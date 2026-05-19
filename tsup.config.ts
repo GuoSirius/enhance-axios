@@ -1,60 +1,111 @@
 import { defineConfig, Options } from 'tsup';
 
-const cjsEsmConfig = defineConfig({
+// ESM builds
+const esmNonMinified = defineConfig({
   entry: ['src/index.ts'],
-  format: ['cjs', 'esm'],
-  outDir: 'dist',
-  splitting: false,
-  sourcemap: true,
-  minify: true,
+  format: ['esm'],
+  outDir: 'dist/esm',
+  clean: true,
+  minify: false,
   dts: true,
-  clean: true,
+  sourcemap: true,
+  external: ['axios'],
+  target: 'es2020',
   outExtension({ format }: Options) {
-    return {
-      cjs: '.js',
-      esm: '.js',
-    };
+    return { esm: '.js' };
   },
-  external: ['axios'],
 });
 
-const iifeConfig = defineConfig({
+const esmMinified = defineConfig({
   entry: ['src/index.ts'],
-  format: ['iife'],
-  outDir: 'dist/iife',
-  splitting: false,
-  sourcemap: true,
+  format: ['esm'],
+  outDir: 'dist/esm/min',
+  clean: true,
   minify: true,
-  clean: true,
-  outExtension() {
-    return {
-      iife: '.global.js',
-    };
-  },
-  globalName: 'EnhanceAxios',
-  define: {
-    'process.env.NODE_ENV': '"production"',
-  },
+  dts: false,
+  sourcemap: false,
   external: ['axios'],
+  target: 'es2020',
+  outExtension({ format }: Options) {
+    return { esm: '.min.js' };
+  },
 });
 
-const iifeDevConfig = defineConfig({
+// CJS builds
+const cjsNonMinified = defineConfig({
+  entry: ['src/index.ts'],
+  format: ['cjs'],
+  outDir: 'dist/cjs',
+  clean: false,
+  minify: false,
+  dts: false,
+  sourcemap: true,
+  external: ['axios'],
+  target: 'es2020',
+  outExtension({ format }: Options) {
+    return { cjs: '.js' };
+  },
+});
+
+const cjsMinified = defineConfig({
+  entry: ['src/index.ts'],
+  format: ['cjs'],
+  outDir: 'dist/cjs/min',
+  clean: true,
+  minify: true,
+  dts: false,
+  sourcemap: false,
+  external: ['axios'],
+  target: 'es2020',
+  outExtension({ format }: Options) {
+    return { cjs: '.min.js' };
+  },
+});
+
+// IIFE builds (browser)
+const iifeNonMinified = defineConfig({
   entry: ['src/index.ts'],
   format: ['iife'],
   outDir: 'dist/iife',
-  splitting: false,
+  clean: false,
+  minify: false,
+  dts: false,
   sourcemap: true,
-  clean: true,
-  outExtension() {
-    return {
-      iife: '.global.js',
-    };
-  },
+  external: ['axios'],
+  target: 'es2020',
   globalName: 'EnhanceAxios',
   define: {
     'process.env.NODE_ENV': '"development"',
   },
-  external: ['axios'],
+  outExtension() {
+    return { iife: '.js' };
+  },
 });
 
-export default [cjsEsmConfig, iifeConfig];
+const iifeMinified = defineConfig({
+  entry: ['src/index.ts'],
+  format: ['iife'],
+  outDir: 'dist/iife/min',
+  clean: true,
+  minify: true,
+  dts: false,
+  sourcemap: false,
+  external: ['axios'],
+  target: 'es2020',
+  globalName: 'EnhanceAxios',
+  define: {
+    'process.env.NODE_ENV': '"production"',
+  },
+  outExtension() {
+    return { iife: '.min.js' };
+  },
+});
+
+export default [
+  esmNonMinified,
+  esmMinified,
+  cjsNonMinified,
+  cjsMinified,
+  iifeNonMinified,
+  iifeMinified,
+];

@@ -2,27 +2,40 @@
   "name": "enhance-axios",
   "version": "1.0.0",
   "description": "axios 增强库，支持防重复提交和取消请求",
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/cjs/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./esm": {
+      "import": "./dist/esm/index.js"
+    },
+    "./esm/min": {
+      "import": "./dist/esm/min/index.min.js"
+    },
+    "./cjs": {
+      "require": "./dist/cjs/index.js"
+    },
+    "./cjs/min": {
+      "require": "./dist/cjs/min/index.min.js"
     },
     "./iife": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/iife/index.global.js"
+      "default": "./dist/iife/index.js"
+    },
+    "./iife/min": {
+      "default": "./dist/iife/min/index.min.js"
     }
   },
+  "unpkg": "dist/iife/min/index.min.js",
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "tsup",
-    "build:all": "npm run build && npm run build:iife",
-    "build:iife": "tsup --config iifeConfig",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
