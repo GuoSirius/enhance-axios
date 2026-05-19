@@ -197,11 +197,21 @@ const api2 = createEnhanceInstance({
 
 ## 构建输出
 
-| 格式 | 文件 | 用途 |
-|------|------|------|
-| ESM | `dist/index.mjs` | ES Module 环境 |
-| CJS | `dist/index.js` | CommonJS 环境 |
-| IIFE | `dist/index.global.js` | 浏览器直接引用 |
+| 格式 | 非压缩 | 压缩版 | 用途 |
+|------|--------|--------|------|
+| ESM | `dist/esm/index.js` | `dist/esm/min/index.mjs` | ES Module 环境 |
+| CJS | `dist/cjs/index.js` | `dist/cjs/min/index.js` | CommonJS 环境 |
+| IIFE | `dist/iife/index.global.js` | `dist/iife/min/index.global.js` | 浏览器直接引用 |
+
+### CDN 使用
+
+```html
+<!-- 压缩版 (推荐) -->
+<script src="https://unpkg.com/enhance-axios@latest/dist/iife/min/index.global.js"></script>
+
+<!-- 非压缩版 (开发调试) -->
+<script src="https://unpkg.com/enhance-axios@latest/dist/iife/index.global.js"></script>
+```
 
 ## 类型
 
