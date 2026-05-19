@@ -14,7 +14,8 @@
       "Bash(xargs ls -la)",
       "Bash(git commit -m 'chore: 更新构建配置支持多格式输出 *)",
       "Bash(git commit *)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); Object.entries\\(p.devDependencies\\).forEach\\(\\([k,v]\\)=>console.log\\(k+': '+v\\)\\)\")"
     ]
   }
 }
