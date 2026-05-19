@@ -23,6 +23,12 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
+  // 添加 json 方法
+  res.json = (data) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(data));
+  };
+
   // CORS 允许跨域
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');

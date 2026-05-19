@@ -6,6 +6,17 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// IIFE plugin: 替换 axios 导入为 window.axios
+const windowAxiosPlugin = {
+  name: 'window-axios',
+  setup(build: any) {
+    build.onResolve({ filter: /^axios$/ }, () => ({
+      path: resolve(__dirname, 'src/axios-shim.ts'),
+      external: false,
+    }));
+  },
+};
+
 // ESM builds (axios external)
 const esmNonMinified = defineConfig({
   entry: ['src/index.ts'],
@@ -68,7 +79,7 @@ const cjsMinified = defineConfig({
   },
 });
 
-// IIFE/UMD builds (axios external, expects window.axios)
+// IIFE builds (axios from window.axios)
 const iifeNonMinified = defineConfig({
   entry: ['src/index.ts'],
   format: ['iife'],
@@ -79,13 +90,9 @@ const iifeNonMinified = defineConfig({
   sourcemap: true,
   target: 'es2020',
   globalName: 'EnhanceAxios',
-  define: {
-    'process.env.NODE_ENV': '"development"',
-  },
-  external: ['axios'],
-  esbuildOptions(options) {
-    options.platform = 'browser';
-  },
+  define: { 'process.env.NODE_ENV': '"development"' },
+  esbuildPlugins: [windowAxiosPlugin],
+  esbuildOptions(opts) { opts.platform = 'browser'; },
   outExtension() {
     return { iife: '.global.js' };
   },
@@ -101,23 +108,12 @@ const iifeMinified = defineConfig({
   sourcemap: false,
   target: 'es2020',
   globalName: 'EnhanceAxios',
-  define: {
-    'process.env.NODE_ENV': '"production"',
-  },
-  external: ['axios'],
-  esbuildOptions(options) {
-    options.platform = 'browser';
-  },
+  define: { 'process.env.NODE_ENV': '"production"' },
+  esbuildPlugins: [windowAxiosPlugin],
+  esbuildOptions(opts) { opts.platform = 'browser'; },
   outExtension() {
     return { iife: '.global.min.js' };
   },
 });
 
-export default [
-  esmNonMinified,
-  esmMinified,
-  cjsNonMinified,
-  cjsMinified,
-  iifeNonMinified,
-  iifeMinified,
-];
+export default [esmNonMinified, esmMinified, cjsNonMinified, cjsMinified, iifeNonMinified, iifeMinified];

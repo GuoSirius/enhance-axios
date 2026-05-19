@@ -7,44 +7,39 @@ metadata:
 
 # enhance-axios
 
-一个 axios 增强库，支持防重复提交、取消请求和失败重试。
+## 构建配置
 
-## 项目状态
-- Node >= 18.0.0
-- 依赖 axios >= 1.7.0 作为 peerDependency
+**IIFE 格式使用 esbuild plugin 替换 axios 导入为 window.axios**
 
-## 构建配置 (tsup.config.ts)
+```typescript
+// Plugin to replace 'axios' import with window.axios in IIFE builds
+const windowAxiosPlugin = {
+  name: 'window-axios',
+  setup(build: any) {
+    build.onResolve({ filter: /^axios$/ }, (args: any) => {
+      return {
+        path: resolve(__dirname, 'src/axios-shim.ts'),
+        external: false,
+      };
+    });
+  },
+};
+```
 
-**关键决策：所有构建格式都 external axios**
-- 使用者需自行安装 axios
-- IIFE 格式期望 window.axios 存在
-- IIFE 文件大小约 120KB（非内联 axios 时的原始大小）
+注意：IIFE 构建时会创建 src/axios-shim.ts，但这是临时文件，提交前需删除。
 
 **输出结构：**
 ```
 dist/
-├── esm/
-│   ├── index.mjs        # ~14KB
-│   └── min/index.mjs    # ~6KB
-├── cjs/
-│   ├── index.js          # ~16KB
-│   └── min/index.js     # ~6KB
-└── iife/
-    ├── index.global.js  # ~123KB
-    └── min/index.global.js
+├── esm/          # axios external
+├── cjs/          # axios external
+└── iife/         # axios 从 window.axios 获取 (~16KB)
 ```
 
-**重要：修改 tsup.config.ts 输出路径时，必须同步更新：**
-1. README.md 构建输出表格
-2. package.json exports 字段
-
-## example 目录
-- `server.js` - Mock 服务器，提供 API 和静态文件服务
-- `index.html` - 可视化测试页面，支持三种加载方式：
-  1. IIFE + node_modules axios
-  2. IIFE + CDN axios
-  3. ESM 动态导入
+**重要规则：**
+1. IIFE 不打包 axios，使用者需自行加载
+2. src/axios-shim.ts 仅构建时使用，构建后删除
+3. 版本号在 src/version.ts，手动同步 package.json
 
 ## 相关文件
 - [[user-role]]
-- [[feedback-build-config]]

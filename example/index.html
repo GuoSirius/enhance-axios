@@ -5,520 +5,273 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>enhance-axios 功能测试</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:monospace;background:#1a1a2e;color:#e0e0e0;min-height:100vh}
-.header{background:#16213e;padding:16px 24px;border-bottom:2px solid #0f3460;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
-.header h1{font-size:18px;color:#e94560}
-.header span{font-size:12px;color:#888}
-.loader-panel{background:#16213e;padding:12px 24px;border-bottom:1px solid #0f3460;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.loader-label{font-size:12px;color:#888}
-.loader-select{background:#0f3460;border:1px solid #1a4080;color:#e0e0e0;padding:6px 10px;border-radius:4px;font-size:12px;font-family:monospace;min-width:200px}
-.loader-select:focus{outline:none;border-color:#e94560}
-.loader-info{font-size:11px;color:#666;margin-left:auto}
-.loader-status{padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700}
-.loader-status.loading{background:#e67e2233;color:#e67e22}
-.loader-status.success{background:#27ae6033;color:#27ae60}
-.loader-status.error{background:#e74c3c33;color:#e74c3c}
-.main{display:flex;gap:16px;padding:16px;height:calc(100vh - 160px)}
-.panel{background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:16px;overflow-y:auto}
-.panel-left{flex:0 0 320px;display:flex;flex-direction:column;gap:16px}
-.panel-right{flex:1;display:flex;flex-direction:column}
-.section{margin-bottom:12px}
-.section-title{font-size:13px;font-weight:700;color:#e94560;margin-bottom:8px;text-transform:uppercase}
-.label{font-size:11px;color:#aaa;margin:6px 0 3px}
-.form-row{display:flex;gap:8px;align-items:center;margin:4px 0}
-input,select{background:#0f3460;border:1px solid #1a4080;color:#e0e0e0;padding:6px 10px;border-radius:4px;font-size:12px;font-family:monospace;width:100%}
-input:focus,select:focus{outline:none;border-color:#e94560}
-input[type=checkbox]{width:auto;margin-right:6px}
-.btn{padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:12px;font-family:monospace;font-weight:700;transition:all .2s}
-.btn-primary{background:#e94560;color:#fff}
-.btn-primary:hover{background:#ff6b81}
-.btn-success{background:#27ae60;color:#fff}
-.btn-success:hover{background:#2ecc71}
-.btn-warning{background:#e67e22;color:#fff}
-.btn-warning:hover{background:#f39c12}
-.btn-danger{background:#c0392b;color:#fff}
-.btn-danger:hover{background:#e74c3c}
-.btn-sm{padding:4px 8px;font-size:10px}
-.btn-group{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.log-area{flex:1;overflow-y:auto;background:#0a0a1a;border-radius:6px;padding:12px;font-size:11px;line-height:1.6}
-.log-entry{margin-bottom:3px;padding:3px 6px;border-radius:3px;display:flex;gap:8px}
-.log-entry:hover{background:#1a1a3e}
-.log-time{color:#666;flex-shrink:0}
-.log-method{color:#3498db;flex-shrink:0;min-width:40px}
-.log-url{color:#e0e0e0;flex:1}
-.log-status{flex-shrink:0;min-width:50px;text-align:right}
-.log-status.success{color:#27ae60}
-.log-status.error{color:#e74c3c}
-.log-status.cancel{color:#e67e22}
-.log-status.retry{color:#3498db}
-.log-status.duplicate{color:#9b59b6}
-.badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:4px}
-.badge-success{background:#27ae6033;color:#27ae60}
-.badge-error{background:#e74c3c33;color:#e74c3c}
-.badge-cancel{background:#e67e2233;color:#e67e22}
-.badge-retry{background:#3498db33;color:#3498db}
-.badge-dup{background:#9b59b633;color:#9b59b6}
-.stats{font-size:11px;color:#888;padding:4px 0}
-.stat-num{color:#e94560;font-weight:700}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+h1 { color: #e94560; margin-bottom: 5px; }
+.subtitle { color: #888; margin-bottom: 20px; }
+.stats { margin-bottom: 20px; }
+.stats span { margin-right: 15px; }
+.stat-num { color: #e94560; font-weight: bold; }
+.container { display: flex; gap: 20px; }
+.panel { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 16px; }
+.left { width: 300px; }
+.right { flex: 1; }
+.section { margin-bottom: 16px; }
+.section-title { font-size: 14px; font-weight: bold; color: #e94560; margin-bottom: 8px; }
+.label { font-size: 12px; color: #aaa; margin: 6px 0 3px; }
+.form-row { margin: 8px 0; }
+input { background: #0f3460; border: 1px solid #1a4080; color: #e0e0e0; padding: 8px; border-radius: 4px; width: 100%; font-size: 12px; }
+input:focus { outline: none; border-color: #e94560; }
+input[type=checkbox] { width: auto; }
+button { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; font-size: 12px; font-weight: bold; margin: 4px; }
+button:hover { opacity: 0.9; }
+.btn-primary { background: #e94560; color: #fff; }
+.btn-success { background: #27ae60; color: #fff; }
+.btn-warning { background: #e67e22; color: #fff; }
+.btn-danger { background: #c0392b; color: #fff; }
+.log-area { background: #0a0a1a; border-radius: 6px; padding: 12px; height: 400px; overflow-y: auto; margin-top: 16px; font-size: 12px; }
+.log-entry { margin-bottom: 4px; padding: 4px; border-radius: 3px; display: flex; gap: 10px; }
+.log-entry:hover { background: #1a1a3e; }
+.log-time { color: #666; }
+.log-method { color: #3498db; min-width: 50px; }
+.log-url { flex: 1; }
+.log-status { min-width: 150px; text-align: right; }
+.log-status.success { color: #27ae60; }
+.log-status.error { color: #e74c3c; }
+.log-status.cancel { color: #e67e22; }
+.log-status.retry { color: #3498db; }
+.log-status.duplicate { color: #9b59b6; }
+.loading { color: #e67e22; }
+.error { color: #e74c3c; }
 </style>
 </head>
 <body>
-<div class="header">
-  <div>
-    <h1>enhance-axios 功能测试</h1>
-    <span>防重复提交 · 取消请求 · 失败重试</span>
-  </div>
-  <div style="text-align:right">
-    <div class="stats">请求: <span class="stat-num" id="stat-total">0</span></div>
-    <div class="stats">成功: <span class="stat-num" id="stat-ok">0</span> | 重试: <span class="stat-num" id="stat-retry">0</span> | 取消: <span class="stat-num" id="stat-cancel">0</span></div>
-  </div>
+<h1>enhance-axios 功能测试</h1>
+<p class="subtitle">防重复提交 · 取消请求 · 失败重试</p>
+
+<div class="stats">
+  <span>请求: <span class="stat-num" id="stat-total">0</span></span>
+  <span>成功: <span class="stat-num" id="stat-ok">0</span></span>
+  <span>重试: <span class="stat-num" id="stat-retry">0</span></span>
+  <span>取消: <span class="stat-num" id="stat-cancel">0</span></span>
 </div>
 
-<div class="loader-panel">
-  <span class="loader-label">axios 来源:</span>
-  <select id="loaderSelect" class="loader-select" onchange="changeLoader()">
-    <option value="npm">node_modules (本地)</option>
-    <option value="cdn">unpkg CDN</option>
-  </select>
-  <span id="loaderStatus" class="loader-status loading">加载中...</span>
-  <span id="loaderInfo" class="loader-info"></span>
-</div>
-
-<div class="main">
-<!-- 左侧配置面板 -->
-<div class="panel panel-left">
-  <div>
-    <div class="section-title">📋 实例配置</div>
-    <div class="form-row">
-      <label style="min-width:80px">Base URL</label>
-      <input type="text" id="baseUrl" value="http://localhost:3000/api">
+<div class="container">
+  <div class="panel left">
+    <div class="section">
+      <div class="section-title">实例配置</div>
+      <div class="form-row">
+        <label class="label">Base URL</label>
+        <input type="text" id="baseUrl" value="http://localhost:3000/api">
+      </div>
+      <div class="form-row">
+        <label class="label">Timeout (ms)</label>
+        <input type="number" id="timeout" value="10000">
+      </div>
     </div>
-    <div class="form-row">
-      <label style="min-width:80px">Timeout(ms)</label>
-      <input type="number" id="timeout" value="10000">
+
+    <div class="section">
+      <div class="section-title">防重复提交</div>
+      <div class="form-row"><label><input type="checkbox" id="prevent-enabled" checked> Enabled</label></div>
+      <div class="form-row">
+        <label class="label">requestKey</label>
+        <input type="text" id="prevent-key" value="${method}-${url}">
+      </div>
+      <div class="form-row">
+        <label class="label">intervalMs</label>
+        <input type="number" id="prevent-interval" value="2000">
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">取消请求</div>
+      <div class="form-row"><label><input type="checkbox" id="cancel-enabled" checked> Enabled</label></div>
+      <div class="form-row">
+        <label class="label">requestKey</label>
+        <input type="text" id="cancel-key" value="${method}-${url}">
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">失败重试</div>
+      <div class="form-row"><label><input type="checkbox" id="retry-enabled" checked> Enabled</label></div>
+      <div class="form-row">
+        <label class="label">retries</label>
+        <input type="number" id="retry-count" value="3">
+      </div>
+      <div class="form-row">
+        <label class="label">retryDelay (ms)</label>
+        <input type="number" id="retry-delay" value="1000">
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="rebuildInstance()">重新创建实例</button>
+  </div>
+
+  <div class="panel right">
+    <div class="section-title">测试操作</div>
+    <button class="btn-primary" onclick="testPreventDuplicate()">防重复 (连发5次)</button>
+    <button class="btn-warning" onclick="testCancelRequest()">取消请求 (连发5次)</button>
+    <button class="btn-success" onclick="testRetry()">重试 (50%失败)</button>
+    <button class="btn-danger" onclick="testServer500()">500错误</button>
+    <button class="btn-primary" onclick="testSingle()">单次请求</button>
+    <button class="btn-danger" onclick="clearLog()">清空日志</button>
+
+    <div class="log-area" id="logArea">
+      <div class="loading">正在加载 enhance-axios...</div>
     </div>
   </div>
-
-  <div class="section">
-    <div class="section-title">🔒 防重复提交</div>
-    <div class="form-row"><label><input type="checkbox" id="prevent-enabled" checked onchange="rebuildInstance()"> Enabled</label></div>
-    <div class="label">requestKey (模板/字符串)</div>
-    <input type="text" id="prevent-key" value="${method}-${url}" placeholder="${method}-${url}">
-    <div class="label">intervalMs (数字)</div>
-    <input type="number" id="prevent-interval" value="2000" min="0">
-    <div class="label">生效 methods (逗号分隔)</div>
-    <input type="text" id="prevent-methods" value="" placeholder="空=全部, 如 GET,POST">
-  </div>
-
-  <div class="section">
-    <div class="section-title">🚫 取消请求</div>
-    <div class="form-row"><label><input type="checkbox" id="cancel-enabled" checked onchange="rebuildInstance()"> Enabled</label></div>
-    <div class="label">requestKey</div>
-    <input type="text" id="cancel-key" value="${method}-${url}" placeholder="${method}-${url}">
-    <div class="label">生效 methods (逗号分隔)</div>
-    <input type="text" id="cancel-methods" value="" placeholder="空=全部">
-  </div>
-
-  <div class="section">
-    <div class="section-title">🔄 失败重试</div>
-    <div class="form-row"><label><input type="checkbox" id="retry-enabled" checked onchange="rebuildInstance()"> Enabled</label></div>
-    <div class="label">retries (重试次数)</div>
-    <input type="number" id="retry-count" value="3" min="0">
-    <div class="label">retryDelay (初始延迟 ms)</div>
-    <input type="number" id="retry-delay" value="1000" min="0">
-    <div class="label">maxDelay (最大延迟 ms)</div>
-    <input type="number" id="retry-maxdelay" value="30000" min="0">
-    <div class="form-row"><label><input type="checkbox" id="retry-exponential" checked> Exponential (指数退避)</label></div>
-    <div class="label">statusCodes (逗号分隔)</div>
-    <input type="text" id="retry-statuscodes" value="408,429,500,502,503,504">
-    <div class="label">生效 methods (逗号分隔)</div>
-    <input type="text" id="retry-methods" value="" placeholder="空=全部">
-  </div>
-
-  <div>
-    <button class="btn btn-primary" onclick="rebuildInstance()" style="width:100%">🔄 重新创建实例</button>
-  </div>
 </div>
 
-<!-- 右侧测试面板 -->
-<div class="panel-right">
-  <div class="section-title">🧪 测试操作</div>
-  <div class="btn-group" style="margin-bottom:12px">
-    <button class="btn btn-primary" onclick="testPreventDuplicate()">🔒 防重复测试 (连发5次)</button>
-    <button class="btn btn-warning" onclick="testCancelRequest()">🚫 取消请求测试 (连发5次)</button>
-    <button class="btn btn-success" onclick="testRetry()">🔄 重试测试 (50%失败)</button>
-    <button class="btn btn-danger" onclick="testServer500()">❌ 500错误测试</button>
-    <button class="btn btn-primary" onclick="testBusinessError()">⚠️ 业务异常测试</button>
-    <button class="btn btn-primary" onclick="testSlow()">🐢 慢接口 (3s)</button>
-    <button class="btn btn-warning" onclick="testSingle()">📤 单次请求</button>
-  </div>
-
-  <div class="section-title">📊 请求日志</div>
-  <div class="log-area" id="logArea">
-    <div style="color:#666;text-align:center;padding:40px">日志会显示在这里...</div>
-  </div>
-  <div style="margin-top:8px">
-    <button class="btn btn-danger btn-sm" onclick="clearLog()">清空日志</button>
-  </div>
-</div>
-</div>
+<!-- 先加载 axios -->
+<script src="../node_modules/axios/dist/axios.min.js"></script>
+<!-- 再加载 enhance-axios -->
+<script src="../dist/iife/index.global.js"></script>
 
 <script>
-// ============ 全局状态 ============
-let apiInstance = null;
-let stats = { total: 0, ok: 0, retry: 0, cancel: 0 };
-let currentLoader = null;
+// 全局状态
+var apiInstance = null;
+var stats = { total: 0, ok: 0, retry: 0, cancel: 0 };
 
-// ============ 加载器配置 ============
-const LOADERS = {
-  'npm': {
-    name: 'axios from node_modules',
-    info: '本地 node_modules/axios',
-    load() {
-      return new Promise((resolve, reject) => {
-        const axiosScript = document.createElement('script');
-        axiosScript.src = '../node_modules/axios/dist/axios.min.js';
-        axiosScript.onload = () => {
-          const script = document.createElement('script');
-          script.src = '../dist/iife/index.global.js';
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error('加载 enhance-axios 失败'));
-          document.head.appendChild(script);
-        };
-        axiosScript.onerror = () => reject(new Error('加载 axios 失败'));
-        document.head.appendChild(axiosScript);
-      });
-    },
-  },
-  'cdn': {
-    name: 'axios from CDN',
-    info: 'unpkg CDN',
-    load() {
-      return new Promise((resolve, reject) => {
-        const axiosScript = document.createElement('script');
-        axiosScript.src = 'https://unpkg.com/axios@1/dist/axios.min.js';
-        axiosScript.crossOrigin = 'anonymous';
-        axiosScript.onload = () => {
-          const script = document.createElement('script');
-          script.src = '../dist/iife/index.global.js';
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error('加载 enhance-axios 失败'));
-          document.head.appendChild(script);
-        };
-        axiosScript.onerror = () => reject(new Error('加载 axios CDN 失败'));
-        document.head.appendChild(axiosScript);
-      });
-    },
-  },
-};
+// 初始化
+function init() {
+  addLog('info', '', 'window.axios 加载: ' + (typeof window.axios !== 'undefined'), 'info');
+  addLog('info', '', 'EnhanceAxios 加载: ' + (typeof window.EnhanceAxios !== 'undefined'), 'info');
 
-// ============ 加载切换 ============
-function setLoaderStatus(status, message) {
-  const el = document.getElementById('loaderStatus');
-  el.className = 'loader-status ' + status;
-  el.textContent = message;
-}
-
-function changeLoader() {
-  const loaderType = document.getElementById('loaderSelect').value;
-  loadLibrary(loaderType);
-}
-
-async function loadLibrary(loaderType) {
-  if (currentLoader === loaderType && apiInstance) {
+  if (typeof window.EnhanceAxios === 'undefined') {
+    addLog('error', '', 'EnhanceAxios 未定义!', 'error');
     return;
   }
-
-  setLoaderStatus('loading', '加载中...');
-  document.getElementById('loaderInfo').textContent = '';
-
-  // 清理旧实例
-  apiInstance = null;
-  window.EnhanceAxios = null;
-
-  // 清理旧脚本
-  const oldScripts = document.querySelectorAll('script[src*="dist/"]');
-  oldScripts.forEach(s => s.remove());
-
-  clearLog();
-
-  try {
-    const loader = LOADERS[loaderType];
-    await loader.load();
-
-    currentLoader = loaderType;
-    document.getElementById('loaderInfo').textContent = loader.info;
-    setLoaderStatus('success', '加载成功');
-
-    init();
-  } catch (err) {
-    setLoaderStatus('error', '加载失败');
-    addLog('error', '', err.message, 'error');
-  }
-}
-
-// ============ 初始化 ============
-function init() {
+  addLog('success', '', '✅ enhance-axios 已加载 v' + (window.EnhanceAxios.version || ''), 'success');
   rebuildInstance();
-  addLog('system', '', '✅ enhance-axios 已加载', 'success');
-  if (typeof EnhanceAxios !== 'undefined') {
-    const version = EnhanceAxios.version || 'latest';
-    addLog('info', '', '版本: ' + version, '');
-  }
 }
 
-// ============ 创建实例 ============
 function rebuildInstance() {
-  const preventEnabled = document.getElementById('prevent-enabled').checked;
-  const preventKey = document.getElementById('prevent-key').value.trim();
-  const preventInterval = parseInt(document.getElementById('prevent-interval').value) || 1000;
-  const preventMethods = document.getElementById('prevent-methods').value.trim().split(',').filter(Boolean);
-
-  const cancelEnabled = document.getElementById('cancel-enabled').checked;
-  const cancelKey = document.getElementById('cancel-key').value.trim();
-  const cancelMethods = document.getElementById('cancel-methods').value.trim().split(',').filter(Boolean);
-
-  const retryEnabled = document.getElementById('retry-enabled').checked;
-  const retryCount = parseInt(document.getElementById('retry-count').value) || 3;
-  const retryDelay = parseInt(document.getElementById('retry-delay').value) || 1000;
-  const retryMaxDelay = parseInt(document.getElementById('retry-maxdelay').value) || 30000;
-  const retryExponential = document.getElementById('retry-exponential').checked;
-  const retryStatusCodes = document.getElementById('retry-statuscodes').value.trim().split(',').map(Number).filter(Boolean);
-  const retryMethods = document.getElementById('retry-methods').value.trim().split(',').filter(Boolean);
-
-  const config = {
+  var config = {
     baseURL: document.getElementById('baseUrl').value,
     timeout: parseInt(document.getElementById('timeout').value) || 10000,
-    preventDuplicate: preventEnabled ? {
-      enabled: true,
-      requestKey: preventKey || undefined,
-      intervalMs: preventInterval,
-      methods: preventMethods.length ? preventMethods : undefined,
+    preventDuplicate: document.getElementById('prevent-enabled').checked ? {
+      requestKey: document.getElementById('prevent-key').value,
+      intervalMs: parseInt(document.getElementById('prevent-interval').value) || 1000,
     } : false,
-    cancelRequest: cancelEnabled ? {
-      enabled: true,
-      requestKey: cancelKey || undefined,
-      methods: cancelMethods.length ? cancelMethods : undefined,
+    cancelRequest: document.getElementById('cancel-enabled').checked ? {
+      requestKey: document.getElementById('cancel-key').value,
     } : false,
-    retry: retryEnabled ? {
-      enabled: true,
-      retries: retryCount,
-      retryDelay: retryDelay,
-      maxDelay: retryMaxDelay,
-      exponential: retryExponential,
-      statusCodes: retryStatusCodes.length ? retryStatusCodes : undefined,
-      methods: retryMethods.length ? retryMethods : undefined,
-      retryCondition: (error) => {
-        return !error.response || (error.response && error.response.status >= 500);
-      },
+    retry: document.getElementById('retry-enabled').checked ? {
+      retries: parseInt(document.getElementById('retry-count').value) || 3,
+      retryDelay: parseInt(document.getElementById('retry-delay').value) || 1000,
     } : false,
   };
 
   try {
-    apiInstance = EnhanceAxios.createEnhanceInstance(config);
-    addLog('info', '', '实例已创建', 'success');
+    apiInstance = window.EnhanceAxios.createEnhanceInstance(config);
+    addLog('success', '', '实例创建成功', 'success');
   } catch (e) {
-    addLog('error', '', '实例创建失败: ' + e.message, 'error');
+    addLog('error', '', '创建失败: ' + e.message, 'error');
   }
 }
 
-// ============ 测试函数 ============
 function testPreventDuplicate() {
-  if (!apiInstance) return;
-  addLog('info', 'POST', '/api/submit', '🔒 防重复测试: 连发5次请求');
-
-  for (let i = 0; i < 5; i++) {
-    const seq = i + 1;
-    addLog('info', 'POST', `/api/submit [第${seq}次]`, '');
-
-    apiInstance.post('/submit', { name: 'test', seq }, {
-      preventDuplicate: {
-        enabled: true,
-        requestKey: '${method}-${url}',
-        intervalMs: 2000,
-      },
-      cancelRequest: false,
-      retry: false,
-    }).then(res => {
-      stats.ok++;
-      updateStats();
-      addLog('info', 'POST', `/api/submit [第${seq}次]`, '✅ ' + JSON.stringify(res.data).substring(0, 60), 'success');
-    }).catch(err => {
-      if (err?.message?.includes('prevented') || err?.message?.includes('cancel')) {
-        stats.cancel++;
-        updateStats();
-        addLog('info', 'POST', `/api/submit [第${seq}次]`, '⏸️ 被拦截', 'duplicate');
+  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
+  addLog('info', 'POST', '/api/submit', '防重复测试: 连发5次');
+  for (var i = 1; i <= 5; i++) {
+    apiInstance.post('/submit', { name: 'test', seq: i }, {
+      preventDuplicate: { requestKey: '${method}-${url}', intervalMs: 2000 },
+      cancelRequest: false, retry: false,
+    }).then(function(res) {
+      stats.ok++; updateStats();
+      addLog('success', 'POST', '/api/submit', '✅ 成功');
+    }).catch(function(err) {
+      if (err && err.message && err.message.includes('prevented')) {
+        stats.cancel++; updateStats();
+        addLog('duplicate', 'POST', '/api/submit', '⏸️ 被拦截');
       } else {
-        addLog('error', 'POST', `/api/submit [第${seq}次]`, '❌ ' + err.message, 'error');
+        addLog('error', 'POST', '/api/submit', '❌ ' + (err && err.message || '未知错误'));
       }
     });
   }
 }
 
 function testCancelRequest() {
-  if (!apiInstance) return;
-  addLog('info', 'GET', '/api/search', '🚫 取消请求测试: 连发5次请求');
-
-  for (let i = 0; i < 5; i++) {
-    const seq = i + 1;
-    const searchTerm = 'keyword-' + seq;
-    addLog('info', 'GET', `/api/search?q=${searchTerm} [第${seq}次]`, '');
-
-    apiInstance.get('/search', { q: searchTerm }, {
-      cancelRequest: {
-        enabled: true,
-        requestKey: '${method}-${url}',
-      },
-      preventDuplicate: false,
-      retry: false,
-    }).then(res => {
-      stats.ok++;
-      updateStats();
-      addLog('info', 'GET', `/api/search`, '✅ ' + JSON.stringify(res.data).substring(0, 60), 'success');
-    }).catch(err => {
-      if (err?.message?.includes('cancel')) {
-        stats.cancel++;
-        updateStats();
-        addLog('info', 'GET', `/api/search`, '🚫 被取消', 'cancel');
+  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
+  addLog('info', 'GET', '/api/search', '取消请求测试: 连发5次');
+  for (var i = 1; i <= 5; i++) {
+    apiInstance.get('/search', { q: 'keyword-' + i }, {
+      cancelRequest: { requestKey: '${method}-${url}' },
+      preventDuplicate: false, retry: false,
+    }).then(function(res) {
+      stats.ok++; updateStats();
+      addLog('success', 'GET', '/api/search', '✅ 成功');
+    }).catch(function(err) {
+      if (err && err.message && err.message.includes('cancel')) {
+        stats.cancel++; updateStats();
+        addLog('cancel', 'GET', '/api/search', '🚫 被取消');
       } else {
-        addLog('error', 'GET', `/api/search`, '❌ ' + err.message, 'error');
+        addLog('error', 'GET', '/api/search', '❌ ' + (err && err.message || '未知错误'));
       }
     });
   }
 }
 
 function testRetry() {
-  if (!apiInstance) return;
-  addLog('info', 'GET', '/api/data', '🔄 重试测试: 50%概率失败');
-
+  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
+  addLog('info', 'GET', '/api/data', '重试测试: 50%失败');
   apiInstance.get('/data', null, {
-    retry: {
-      enabled: true,
-      retries: 3,
-      retryDelay: 500,
-      maxDelay: 5000,
-      exponential: true,
-    },
-    preventDuplicate: false,
-    cancelRequest: false,
-  }).then(res => {
-    stats.ok++;
-    updateStats();
-    addLog('info', 'GET', '/api/data', '✅ 成功', 'success');
-  }).catch(err => {
-    addLog('error', 'GET', '/api/data', '❌ ' + err.message, 'error');
+    retry: { retries: 3, retryDelay: 500 },
+    preventDuplicate: false, cancelRequest: false,
+  }).then(function(res) {
+    stats.ok++; updateStats();
+    addLog('success', 'GET', '/api/data', '✅ 成功');
+  }).catch(function(err) {
+    addLog('error', 'GET', '/api/data', '❌ ' + (err && err.message || '未知错误'));
   });
 }
 
 function testServer500() {
-  if (!apiInstance) return;
-  addLog('info', 'GET', '/api/error', '❌ 500错误测试');
-
-  apiInstance.get('/error', null, {
-    retry: {
-      enabled: true,
-      retries: 3,
-      retryDelay: 500,
-      statusCodes: [500, 502, 503, 504],
-    },
-    preventDuplicate: false,
-    cancelRequest: false,
-  }).then(res => {
-    stats.ok++;
-    updateStats();
-    addLog('info', 'GET', '/api/error', '✅ 成功', 'success');
-  }).catch(err => {
-    stats.retry++;
-    updateStats();
-    addLog('error', 'GET', '/api/error', '❌ 重试耗尽: ' + (err.response?.status || err.message), 'error');
-  });
-}
-
-function testBusinessError() {
-  if (!apiInstance) return;
-  addLog('info', 'GET', '/api/business-error', '⚠️ 业务异常测试');
-
-  apiInstance.get('/business-error', null, {
-    retry: {
-      enabled: true,
-      retries: 2,
-      retryDelay: 300,
-    },
-    preventDuplicate: false,
-    cancelRequest: false,
-  }).then(res => {
-    if (res.data && res.data.code !== 0) {
-      addLog('info', 'GET', '/api/business-error', '⚠️ 业务码: ' + res.data.code, 'retry');
-    } else {
-      stats.ok++;
-      updateStats();
-      addLog('info', 'GET', '/api/business-error', '✅ 成功', 'success');
-    }
-  }).catch(err => {
-    addLog('error', 'GET', '/api/business-error', '❌ ' + err.message, 'error');
-  });
-}
-
-function testSlow() {
-  if (!apiInstance) return;
-  addLog('info', 'GET', '/api/slow', '🐢 慢接口测试 (3s)');
-
-  apiInstance.get('/slow', null, {
-    timeout: 4000,
-    retry: false,
-    preventDuplicate: false,
-    cancelRequest: false,
-  }).then(res => {
-    stats.ok++;
-    updateStats();
-    addLog('info', 'GET', '/api/slow', '✅ 完成', 'success');
-  }).catch(err => {
-    addLog('error', 'GET', '/api/slow', '❌ ' + err.message, 'error');
+  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
+  addLog('info', 'GET', '/api/error', '500错误测试 (重试3次)');
+  apiInstance.get('/api/error', null, {
+    retry: { retries: 3, retryDelay: 500 },
+    preventDuplicate: false, cancelRequest: false,
+  }).then(function() {
+    stats.ok++; updateStats();
+    addLog('success', 'GET', '/api/error', '✅ 成功');
+  }).catch(function(err) {
+    addLog('error', 'GET', '/api/error', '❌ 重试耗尽');
   });
 }
 
 function testSingle() {
-  if (!apiInstance) return;
-  addLog('info', 'GET', '/api/success', '📤 单次请求');
-
-  apiInstance.get('/success', null, {
-    preventDuplicate: false,
-    cancelRequest: false,
-    retry: false,
-  }).then(res => {
-    stats.ok++;
-    updateStats();
-    addLog('info', 'GET', '/api/success', '✅ ' + JSON.stringify(res.data).substring(0, 60), 'success');
-  }).catch(err => {
-    addLog('error', 'GET', '/api/success', '❌ ' + err.message, 'error');
+  if (!apiInstance) { addLog('error', '', '请先创建实例', 'error'); return; }
+  addLog('info', 'GET', '/api/success', '单次请求测试');
+  apiInstance.get('/api/success', null, {
+    preventDuplicate: false, cancelRequest: false, retry: false,
+  }).then(function(res) {
+    stats.ok++; updateStats();
+    addLog('success', 'GET', '/api/success', '✅ ' + JSON.stringify(res.data));
+  }).catch(function(err) {
+    addLog('error', 'GET', '/api/success', '❌ ' + (err && err.message || '未知错误'));
   });
 }
 
-// ============ 日志和统计 ============
-function addLog(type, method, url, message, status) {
+function addLog(method, url, message, status) {
   stats.total++;
   updateStats();
-
-  const logArea = document.getElementById('logArea');
-  const entry = document.createElement('div');
+  var logArea = document.getElementById('logArea');
+  var entry = document.createElement('div');
   entry.className = 'log-entry';
-  entry.innerHTML = [
-    '<span class="log-time">' + new Date().toLocaleTimeString() + '</span>',
-    '<span class="log-method">' + (method || '') + '</span>',
-    '<span class="log-url">' + url + '</span>',
-    '<span class="log-status ' + status + '">' + message + '</span>',
-  ].join(' ');
+  entry.innerHTML =
+    '<span class="log-time">' + new Date().toLocaleTimeString() + '</span>' +
+    '<span class="log-method">' + method + '</span>' +
+    '<span class="log-url">' + url + '</span>' +
+    '<span class="log-status ' + status + '">' + message + '</span>';
   logArea.appendChild(entry);
   logArea.scrollTop = logArea.scrollHeight;
-
-  if (logArea.children.length > 200) {
-    logArea.removeChild(logArea.firstChild);
-  }
+  if (logArea.children.length > 100) logArea.removeChild(logArea.firstChild);
 }
 
 function clearLog() {
-  document.getElementById('logArea').innerHTML = '<div style="color:#666;text-align:center;padding:40px">日志会显示在这里...</div>';
+  document.getElementById('logArea').innerHTML = '';
   stats = { total: 0, ok: 0, retry: 0, cancel: 0 };
   updateStats();
 }
@@ -530,9 +283,8 @@ function updateStats() {
   document.getElementById('stat-cancel').textContent = stats.cancel;
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  loadLibrary('npm');
-});
+// 页面加载完成后初始化
+window.addEventListener('load', init);
 </script>
 </body>
 </html>
