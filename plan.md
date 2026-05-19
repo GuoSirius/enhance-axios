@@ -125,9 +125,12 @@ interface CancelRequestConfig {
 
 ---
 
-## 进行中 🔄
+## 已完成 ✅
+- [x] 配置归一化 - 支持多格式输入 (bool/string/function/array/number)
+- [x] 新增 Retry 重试扩展
 
-### 扩展功能配置约定
+### 待完成
+- [ ] 更新 README
 
 扩展功能的配置键（preventDuplicate、cancelRequest、retry）遵循以下约定：
 
@@ -179,16 +182,16 @@ preventDuplicate: { enabled: true, intervalMs: 2000 }
 实现位置：`src/core/index.ts` - 新增 `normalizeConfig` 工具函数
 
 **任务列表**
-- [ ] 新增 `normalizeConfig<T>` 工具函数
+- [x] 新增 `normalizeConfig<T>` 工具函数
   - 支持 boolean → enabled
   - 支持 string/function → requestKey
   - 支持 string[] → methods
   - 支持 number → intervalMs (prevent) / retryDelay (retry)
   - 支持 object → 保持原样
-- [ ] 修改 `mergePreventConfig` 使用 normalizeConfig
-- [ ] 修改 `mergeCancelConfig` 使用 normalizeConfig
-- [ ] 添加测试用例
-- [ ] 提交代码
+- [x] 修改 `mergePreventConfig` 使用 normalizeConfig
+- [x] 修改 `mergeCancelConfig` 使用 normalizeConfig
+- [x] 添加测试用例
+- [x] 提交代码
 
 ---
 
@@ -214,16 +217,16 @@ api.get('/data', null, { retry: { retries: 5, exponential: true } });
 ```
 
 **任务列表**
-- [ ] 新增 `RetryConfig` 类型定义
-- [ ] 实现重试拦截器
+- [x] 新增 `RetryConfig` 类型定义
+- [x] 实现重试拦截器
   - 计算重试延迟（支持指数退避）
   - 判断是否应该重试
   - 克隆配置发起新请求
-- [ ] 集成到 createEnhanceInstance
-- [ ] 配置归一化支持（数字 → retries）
-- [ ] 添加测试用例
+- [x] 集成到 createEnhanceInstance
+- [x] 配置归一化支持（数字 → retries）
+- [x] 添加测试用例
 - [ ] 更新 README
-- [ ] 提交代码
+- [x] 提交代码
 
 ---
 

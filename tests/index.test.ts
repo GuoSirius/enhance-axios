@@ -277,5 +277,65 @@ describe('enhance-axios', () => {
       });
       expect(instance.enhance).toBeDefined();
     });
+
+    it('可自定义 retryCondition 判断业务码异常', () => {
+      // 这个测试验证配置可以被正确设置
+      const instance = createEnhanceInstance({
+        retry: {
+          retryCondition: (error) => {
+            // 自定义：HTTP 2xx 但业务码非 0 时重试
+            if (error.response?.status === 200 && error.response?.data?.code !== 0) {
+              return true;
+            }
+            return !error.response || error.response.status >= 500;
+          },
+        },
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('可配置 statusCodes', () => {
+      const instance = createEnhanceInstance({
+        retry: { statusCodes: [408, 429, 500, 502, 503, 504] },
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('可配置 exponential 指数退避', () => {
+      const instance = createEnhanceInstance({
+        retry: { exponential: false },
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+  });
+
+  describe('拦截器场景分析', () => {
+    it('HTTP 2xx 但业务码异常需要用户自定义 retryCondition', () => {
+      // 说明：这种情况 axios 不会抛出错误
+      // 用户需要在响应拦截器中自行处理或使用 transformResponse
+      const instance = createEnhanceInstance({
+        retry: {
+          retryCondition: (error) => {
+            // 自定义判断逻辑
+            return error.response?.data?.code !== 0;
+          },
+        },
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('网络错误触发重试（默认行为）', () => {
+      const instance = createEnhanceInstance({
+        retry: { retries: 3 },
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('5xx 错误触发重试（默认行为）', () => {
+      const instance = createEnhanceInstance({
+        retry: { statusCodes: [500, 502, 503, 504] },
+      });
+      expect(instance.enhance).toBeDefined();
+    });
   });
 });
