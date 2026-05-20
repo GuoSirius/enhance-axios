@@ -262,7 +262,7 @@ function normalizePreventConfig(
 
   // function -> requestKey
   if (typeof config === 'function') {
-    return { ...defaults, enabled: true, requestKey: config as (config: AxiosRequestConfig) => string };
+    return { ...defaults, enabled: true, requestKey: config as (cfg: AxiosRequestConfig, h: (s: string) => string) => string };
   }
 
   // number -> intervalMs
@@ -308,7 +308,7 @@ function normalizeCancelConfig(
   }
 
   if (typeof config === 'function') {
-    return { ...defaults, enabled: true, requestKey: config as (config: AxiosRequestConfig) => string };
+    return { ...defaults, enabled: true, requestKey: config as (cfg: AxiosRequestConfig, h: (s: string) => string) => string };
   }
 
   if (Array.isArray(config)) {

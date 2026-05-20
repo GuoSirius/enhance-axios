@@ -93,12 +93,12 @@ export function hash(str: string): string {
  */
 export function resolveRequestKey(
   config: AxiosRequestConfig,
-  keyTemplate?: string | ((config: AxiosRequestConfig) => string),
+  keyTemplate?: string | ((config: AxiosRequestConfig, hash: (str: string) => string) => string),
 ): string {
   if (!keyTemplate) return generateDefaultKey(config);
 
   if (typeof keyTemplate === 'function') {
-    return keyTemplate(config);
+    return keyTemplate(config, hash);
   }
 
   if (typeof keyTemplate === 'string' && keyTemplate.includes('${')) {

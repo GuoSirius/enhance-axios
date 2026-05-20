@@ -328,7 +328,7 @@ api.post('/upload', getFormData({ avatar: file, name: 'test' }), {
 | `preventDuplicate: false` | 关闭 |
 | `preventDuplicate: 2000` | 设置 `intervalMs` 为 2000 |
 | `preventDuplicate: '${url}'` | 设置 `requestKey` |
-| `preventDuplicate: (cfg) => key` | 设置 `requestKey` 生成函数 |
+| `preventDuplicate: (cfg, hash) => key` | 设置 `requestKey` 生成函数，`hash` 可将结果哈希化 |
 | `preventDuplicate: ['GET', 'POST']` | 设置 `methods` |
 | `cancelRequest: true` / `false` | 同上（无 number 简写） |
 | `retry: true` / `false` | 启用/关闭 |

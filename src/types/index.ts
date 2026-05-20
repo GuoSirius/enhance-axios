@@ -42,7 +42,7 @@ export interface PreventDuplicateConfig {
   /** 是否启用防重复提交，默认 true */
   enabled?: boolean;
   /** 请求标识生成方式 */
-  requestKey?: string | ((config: AxiosRequestConfig) => string);
+  requestKey?: string | ((config: AxiosRequestConfig, hash: (str: string) => string) => string);
   /** 生效的 HTTP 方法，默认全部方法 */
   methods?: string[];
   /** 防重复时间窗口(ms)，默认 1000 */
@@ -59,7 +59,7 @@ export interface CancelRequestConfig {
   /** 是否启用取消请求，默认 true */
   enabled?: boolean;
   /** 请求标识生成方式 */
-  requestKey?: string | ((config: AxiosRequestConfig) => string);
+  requestKey?: string | ((config: AxiosRequestConfig, hash: (str: string) => string) => string);
   /** 生效的 HTTP 方法，默认全部方法 */
   methods?: string[];
 }
@@ -154,7 +154,7 @@ export type PreventDuplicateOption =
   | PreventDuplicateConfig
   | boolean
   | string
-  | ((config: AxiosRequestConfig) => string)
+  | ((config: AxiosRequestConfig, hash: (str: string) => string) => string)
   | number
   | string[];
 
@@ -167,7 +167,7 @@ export type CancelRequestOption =
   | CancelRequestConfig
   | boolean
   | string
-  | ((config: AxiosRequestConfig) => string)
+  | ((config: AxiosRequestConfig, hash: (str: string) => string) => string)
   | string[];
 
 /**
