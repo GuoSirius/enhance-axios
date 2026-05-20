@@ -663,7 +663,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
     // ─────────────────────────────────────────────────────────────────────────
     // 成功响应处理 (2xx)
     // ─────────────────────────────────────────────────────────────────────────
-    (response) => {
+    async (response) => {
       const config = response.config;
 
       // ─────────────────────────────────────────────────────────────────────
@@ -675,12 +675,15 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
         syntheticError.config = config;
         syntheticError.response = response;
         syntheticError.isAxiosError = true;
-        (syntheticError as any).__bizRetry = true;
-        (syntheticError as any).__retryChecked = true;
 
         if (retryConfig.retryCondition(syntheticError)) {
-          cleanupRegistered(config, requestManager);
-          throw syntheticError;
+          const retryCount = (config as any).__retryCount || 0;
+          if (retryCount < retryConfig.retries) {
+            await new Promise((resolve) => setTimeout(resolve, calculateRetryDelay(retryConfig, retryCount)));
+            cleanupRegistered(config, requestManager);
+            (config as any).__retryCount = retryCount + 1;
+            return instance.request(config);
+          }
         }
       }
 
@@ -712,20 +715,19 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
         const retryCount = (config as any).__retryCount || 0;
 
         const shouldRetry =
-          (retryCount < retryConfig.retries) &&
-          // retryCondition 可能已被 success handler 调用过，避免重复
-          ((error as any).__retryChecked || retryConfig.retryCondition(error)) &&
-          ((error as any).__bizRetry || !error.response || !retryConfig.statusCodes.length || retryConfig.statusCodes.includes(error.response.status));
+          retryCount < retryConfig.retries &&
+          retryConfig.retryCondition(error) &&
+          (!error.response || !retryConfig.statusCodes.length || retryConfig.statusCodes.includes(error.response.status));
 
         if (shouldRetry) {
           await new Promise((resolve) => setTimeout(resolve, calculateRetryDelay(retryConfig, retryCount)));
-          cleanupRegistered(config, requestManager);  // 清理注册，保留 deferred 供重试链复用
+          cleanupRegistered(config, requestManager);
           (config as any).__retryCount = retryCount + 1;
           return instance.request(config);
         }
       }
 
-      // 情况 4：重试耗尽 / 不满足条件 → reject + 清理
+      // 情况 4：不需要重试或重试耗尽，清理并抛出错误
       rejectAndCleanup(config, requestManager, pendingReturns, error);
       return Promise.reject(error);
     }
