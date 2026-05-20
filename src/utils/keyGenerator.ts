@@ -102,7 +102,7 @@ export function resolveRequestKey(
   }
 
   if (typeof keyTemplate === 'string' && keyTemplate.includes('${')) {
-    return resolveTemplate(keyTemplate, config);
+    return hash(resolveTemplate(keyTemplate, config));
   }
 
   return keyTemplate;
