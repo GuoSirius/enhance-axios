@@ -333,6 +333,10 @@ api.post('/upload', getFormData({ avatar: file, name: 'test' }), {
 | `cancelRequest: true` / `false` | 同上（无 number 简写） |
 | `retry: true` / `false` | 启用/关闭 |
 | `retry: 5` | 设置 `retries` 为 5 |
+| `retry: [408, 429, 500]` | 设置 `statusCodes` |
+| `retry: (err) => condition` | 设置 `retryCondition` |
+
+> 非对象快捷方式默认开启功能，仅 `false` 明确关闭。
 
 ## requestKey 模板
 

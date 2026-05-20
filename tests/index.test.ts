@@ -264,6 +264,27 @@ describe('enhance-axios', () => {
       expect(instance.enhance).toBeDefined();
     });
 
+    it('数组赋给 statusCodes', () => {
+      const instance = createEnhanceInstance({
+        retry: [408, 429, 500],
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('空数组 statusCodes 视为全部状态码', () => {
+      const instance = createEnhanceInstance({
+        retry: [] as any,
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
+    it('函数赋给 retryCondition', () => {
+      const instance = createEnhanceInstance({
+        retry: (error: any) => !error.response || error.response.status >= 500,
+      });
+      expect(instance.enhance).toBeDefined();
+    });
+
     it('可配置 exponential', () => {
       const instance = createEnhanceInstance({
         retry: { exponential: false },

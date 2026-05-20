@@ -174,14 +174,18 @@ export type CancelRequestOption =
  * 重试配置联合类型
  *
  * 支持多种输入格式：
- * - boolean: 直接启用/禁用
+ * - boolean: 启用/禁用
  * - number: 设置 retries
+ * - number[]: 设置 statusCodes
+ * - function: 设置 retryCondition
  * - object: 完整配置对象
  */
 export type RetryOption =
   | RetryConfig
   | boolean
-  | number;
+  | number
+  | number[]
+  | ((error: AxiosError) => boolean);
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 内部类型（归一化后的配置，可选字段已填充默认值）

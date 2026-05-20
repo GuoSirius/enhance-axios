@@ -330,8 +330,13 @@ function normalizeCancelConfig(
  * 支持的输入格式：
  * - boolean: 赋给 enabled
  * - number: 赋给 retries
+ * - number[]: 赋给 statusCodes
+ * - function: 赋给 retryCondition
  * - object: 合并到配置
  * - undefined/null: 视为未传递，使用默认值
+ *
+ * 注意：非对象类型的快捷方式默认开启该功能（enabled: true），
+ * 仅 retry: false 时明确关闭。
  */
 function normalizeRetryConfig(
   config: RetryOption | undefined,
@@ -347,6 +352,14 @@ function normalizeRetryConfig(
 
   if (typeof config === 'number') {
     return { ...defaults, retries: config };
+  }
+
+  if (typeof config === 'function') {
+    return { ...defaults, retryCondition: config as (error: AxiosError) => boolean };
+  }
+
+  if (Array.isArray(config)) {
+    return { ...defaults, statusCodes: config as number[] };
   }
 
   return {
