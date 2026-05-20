@@ -469,38 +469,36 @@ function testBizError() {
   var body = createGroup('业务码异常测试 #' + groupId, 'retry');
   addScenario(body,
     '<strong>场景：</strong>HTTP 200 但业务码非0（code: 1001）<br>' +
-    '<strong>说明：</strong>HTTP 200 时 axios 不抛异常。需在响应拦截器中检查业务码并主动 throw，即可触发重试。');
+    '<strong>预期：</strong>retryCondition 在 success handler 中直接检测并重试，无需额外拦截器。');
+  var retryCount = 0;
   stats.send++; updateStats();
-  var bizApi = window.EnhanceAxios.createEnhanceInstance({
-    baseURL: document.getElementById('baseUrl').value,
-    retry: { enabled: true, retries: 2, retryDelay: 300,
+  addRequest(body, groupId, 'GET', '/api/business-error', 'send', '发起请求...');
+  api.get('/api/business-error', null, {
+    retry: {
+      enabled: true, retries: 2, retryDelay: 300,
       retryCondition: function(err) {
-        if (!err.response) return true;
-        if (err.__bizRetry) { stats.retry++; updateStats(); return true; }
-        return err.response.status >= 500;
-      }},
-  });
-  bizApi.interceptors.response.use(
-    function(resp) {
-      if (resp.data && resp.data.code !== 0) {
-        var err = new Error('Business Error: ' + resp.data.message);
-        err.response = resp; err.__bizRetry = true; throw err;
-      }
-      return resp;
+        // 2xx 业务码异常也重试
+        if (err.response && err.response.status === 200 && err.response.data && err.response.data.code !== 0) {
+          retryCount++; stats.retry++; updateStats();
+          addRetryIndicator(body, retryCount, 300 * Math.pow(2, retryCount - 1));
+          return true;
+        }
+        if (!err.response || err.response.status >= 500) { retryCount++; stats.retry++; updateStats(); return true; }
+        return false;
+      },
     },
-    function(err) { return Promise.reject(err); }
-  );
-  addRequest(body, groupId, 'GET', '/api/business-error', 'send', '发起请求 (带业务码检查拦截器)...');
-  bizApi.get('/api/business-error').then(function(r) {
+    preventDuplicate: false, cancelRequest: false,
+  }).then(function(r) {
     stats.ok++; updateStats();
     var cards = body.querySelectorAll('.request-card');
     cards[0].className = 'request-card success';
     cards[0].querySelector('.req-detail').innerHTML = '<span class="success">✓</span> 成功: code=' + (r.data && r.data.code);
     addFinalResult(body, '★ 结果：成功', true);
   }).catch(function(err) {
+    stats.fail++; updateStats();
     var cards = body.querySelectorAll('.request-card');
     cards[0].className = 'request-card failed';
-    cards[0].querySelector('.req-detail').innerHTML = '<span class="error">✗</span> 重试耗尽, ' + (err && err.message);
+    cards[0].querySelector('.req-detail').innerHTML = '<span class="error">✗</span> 重试' + retryCount + '次后失败';
     addFinalResult(body, '✗ 最终结果：业务码始终异常', false);
   });
 }
