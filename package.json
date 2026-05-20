@@ -4,10 +4,10 @@
   "description": "axios 增强库，支持防重复提交、取消请求和失败重试",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.mjs",
-  "types": "dist/cjs/index.d.ts",
+  "types": "dist/esm/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/cjs/index.d.ts",
+      "types": "./dist/esm/index.d.mts",
       "import": "./dist/esm/index.mjs",
       "require": "./dist/cjs/index.js"
     },
@@ -15,22 +15,32 @@
       "import": "./dist/esm/index.mjs"
     },
     "./esm/min": {
-      "import": "./dist/esm/min/index.mjs"
+      "import": "./dist/esm/index.min.mjs"
     },
     "./cjs": {
       "require": "./dist/cjs/index.js"
     },
     "./cjs/min": {
-      "require": "./dist/cjs/min/index.js"
+      "require": "./dist/cjs/index.min.js"
     },
-    "./iife": {
-      "default": "./dist/iife/index.global.js"
+    "./umd": {
+      "import": "./dist/umd/index.global.js",
+      "default": "./dist/umd/index.global.js"
     },
-    "./iife/min": {
-      "default": "./dist/iife/min/index.global.js"
+    "./umd/min": {
+      "import": "./dist/umd/index.min.global.js",
+      "default": "./dist/umd/index.min.global.js"
+    },
+    "./umd.bundle": {
+      "import": "./dist/umd.bundle/index.axios.global.js",
+      "default": "./dist/umd.bundle/index.axios.global.js"
+    },
+    "./umd.bundle/min": {
+      "import": "./dist/umd.bundle/index.axios.min.global.js",
+      "default": "./dist/umd.bundle/index.axios.min.global.js"
     }
   },
-  "unpkg": "dist/iife/min/index.global.js",
+  "unpkg": "dist/umd/index.min.global.js",
   "files": [
     "dist"
   ],

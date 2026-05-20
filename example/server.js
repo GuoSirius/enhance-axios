@@ -1,12 +1,14 @@
 /**
  * enhance-axios Mock Server
  * 用于测试防重复提交、取消请求、重试功能
+ *
+ * 使用原生 http 模块，避免依赖 express/koa 等框架
  */
 
 const http = require('http');
-const url = require('url');
 const fs = require('fs');
 const path = require('path');
+const { URL } = require('url');
 const mockApi = require('./mock-api');
 
 const PORT = 3000;
@@ -22,26 +24,30 @@ const MIME_TYPES = {
   '.jpg': 'image/jpeg',
 };
 
-const server = http.createServer((req, res) => {
-  // 添加 json 方法
-  res.json = (data) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(data));
-  };
+// 辅助函数：发送 JSON 响应
+const sendJson = (res, statusCode, data) => {
+  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(data));
+};
 
+const server = http.createServer((req, res) => {
   // CORS 允许跨域
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+  // 处理 OPTIONS 预检请求
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
     res.end();
     return;
   }
 
-  const parsed = url.parse(req.url, true);
-  const pathname = parsed.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+  // 使用 WHATWG URL API 解析请求 URL
+  const baseUrl = `http://${req.headers.host || 'localhost:' + PORT}`;
+  const parsedUrl = new URL(req.url, baseUrl);
+  const pathname = parsedUrl.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+  const query = Object.fromEntries(parsedUrl.searchParams);
 
   // 静态文件服务 - 支持 ../dist/ 和 ../node_modules/ 目录
   if (pathname.startsWith('dist/') || pathname.startsWith('node_modules/')) {
@@ -51,8 +57,7 @@ const server = http.createServer((req, res) => {
 
     fs.readFile(staticPath, (err, data) => {
       if (err) {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not Found: ' + pathname);
+        sendJson(res, 404, { code: 404, message: 'Not Found: ' + pathname });
         return;
       }
       res.writeHead(200, { 'Content-Type': contentType });
@@ -66,8 +71,7 @@ const server = http.createServer((req, res) => {
     const htmlPath = path.join(__dirname, 'index.html');
     fs.readFile(htmlPath, 'utf-8', (err, data) => {
       if (err) {
-        res.writeHead(500);
-        res.end('Failed to load index.html');
+        sendJson(res, 500, { code: 500, message: 'Failed to load index.html' });
         return;
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -88,18 +92,34 @@ const server = http.createServer((req, res) => {
       req.on('end', () => {
         try {
           req.body = JSON.parse(body);
-        } catch {}
-        req.query = parsed.query;
-        handler(req, res);
+        } catch {
+          req.body = {};
+        }
+        req.query = query;
+        try {
+          handler(req, res);
+        } catch (err) {
+          console.error('Handler error:', err);
+          sendJson(res, 500, { code: 500, message: 'Internal handler error' });
+        }
       });
     } else {
-      req.query = parsed.query;
-      handler(req, res);
+      req.query = query;
+      try {
+        handler(req, res);
+      } catch (err) {
+        console.error('Handler error:', err);
+        sendJson(res, 500, { code: 500, message: 'Internal handler error' });
+      }
     }
   } else {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ code: 404, message: `Not Found: ${pathname}` }));
+    sendJson(res, 404, { code: 404, message: 'Not Found: ' + pathname });
   }
+});
+
+// 错误处理，防止服务器崩溃
+server.on('error', (err) => {
+  console.error('Server error:', err);
 });
 
 server.listen(PORT, () => {

@@ -1,16 +1,25 @@
 /**
  * Mock API 处理器
  * 用于测试 enhance-axios 的各项功能
+ *
+ * 注意：使用原生 http 模块，res 没有 status() 方法
+ * 需要使用 res.writeHead() 来设置状态码
  */
 
 const mockDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+// 辅助函数：设置状态码并发送 JSON 响应
+const sendJson = (res, statusCode, data) => {
+  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(data));
+};
 
 const responses = {
   // 防重复提交测试 - 随机延迟
   submit: (req, res) => {
     const delay = mockDelay(200, 500);
     setTimeout(() => {
-      res.json({
+      sendJson(res, 200, {
         code: 0,
         message: 'success',
         data: { id: Date.now() },
@@ -23,7 +32,7 @@ const responses = {
   search: (req, res) => {
     const delay = mockDelay(800, 1500);
     setTimeout(() => {
-      res.json({
+      sendJson(res, 200, {
         code: 0,
         message: 'success',
         data: {
@@ -44,13 +53,13 @@ const responses = {
 
     setTimeout(() => {
       if (shouldFail) {
-        res.status(500).json({
+        sendJson(res, 500, {
           code: 500,
           message: 'Internal Server Error',
           data: null
         });
       } else {
-        res.json({
+        sendJson(res, 200, {
           code: 0,
           message: 'success',
           data: { value: Math.random().toString(36).substring(7) }
@@ -61,7 +70,7 @@ const responses = {
 
   // 固定 500 错误
   error: (req, res) => {
-    res.status(500).json({
+    sendJson(res, 500, {
       code: 500,
       message: 'Server Error',
       data: null
@@ -70,7 +79,7 @@ const responses = {
 
   // 固定 502 错误
   error502: (req, res) => {
-    res.status(502).json({
+    sendJson(res, 502, {
       code: 502,
       message: 'Bad Gateway',
       data: null
@@ -79,7 +88,7 @@ const responses = {
 
   // HTTP 2xx 但业务码错误
   'business-error': (req, res) => {
-    res.json({
+    sendJson(res, 200, {
       code: 1001,
       message: 'Business Error: Invalid parameter',
       data: null
@@ -88,7 +97,7 @@ const responses = {
 
   // 429 Too Many Requests
   error429: (req, res) => {
-    res.status(429).json({
+    sendJson(res, 429, {
       code: 429,
       message: 'Too Many Requests',
       data: null
@@ -98,7 +107,7 @@ const responses = {
   // 慢接口 - 3秒延迟
   slow: (req, res) => {
     setTimeout(() => {
-      res.json({
+      sendJson(res, 200, {
         code: 0,
         message: 'success',
         data: { slow: true }
@@ -108,7 +117,7 @@ const responses = {
 
   // 成功接口
   success: (req, res) => {
-    res.json({
+    sendJson(res, 200, {
       code: 0,
       message: 'success',
       data: { timestamp: Date.now() }
@@ -120,7 +129,7 @@ const responses = {
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 10;
 
-    res.json({
+    sendJson(res, 200, {
       code: 0,
       message: 'success',
       data: {
