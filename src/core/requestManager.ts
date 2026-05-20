@@ -18,9 +18,19 @@
  *
  * 注意：两个 Map 是独立的，同一个 key 可以同时存在于两个 Map 中
  * 这是因为防重复和取消请求可能同时启用（虽然推荐只使用其中一个）
+ *
+ * ════════════════════════════════════════════════════════════════════════════════
+ *                           取消机制说明
+ * ════════════════════════════════════════════════════════════════════════════════
+ *
+ * 使用 AbortController / AbortSignal（axios 1.x 推荐方式）
+ * - 创建：new AbortController()
+ * - 设置到请求：config.signal = controller.signal
+ * - 取消：controller.abort(reason)
+ * - 取消错误：axios.isCancel(error) 对两种机制都有效
  */
 
-import axios, { CancelTokenSource, type AxiosRequestConfig } from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 import type { PendingRequest } from '../types';
 
 /**
@@ -44,21 +54,21 @@ export class RequestManager {
    *
    * @param key 请求标识
    * @param type 请求类型：'prevent' 防重复 或 'cancel' 取消请求
-   * @param source CancelTokenSource
+   * @param controller AbortController
    * @param promise 请求的 Promise
    * @param config 请求配置（用于记录元数据）
    */
   registerRequest(
     key: string,
     type: 'prevent' | 'cancel',
-    source: CancelTokenSource,
+    controller: AbortController,
     promise: Promise<unknown>,
     config?: AxiosRequestConfig
   ): void {
     const pending: PendingRequest = {
       key,
       config: config || {},
-      cancelSource: source,
+      controller,
       promise,
       timestamp: Date.now(),
     };
@@ -95,7 +105,7 @@ export class RequestManager {
     const preventReq = this.preventPending.get(key);
     if (preventReq) {
       try {
-        preventReq.cancelSource.cancel('Cancelled by cancelRequest');
+        preventReq.controller.abort('Cancelled by cancelRequest');
       } catch {
         // 忽略取消错误
       }
@@ -107,7 +117,7 @@ export class RequestManager {
     const cancelReq = this.cancelPending.get(key);
     if (cancelReq) {
       try {
-        cancelReq.cancelSource.cancel('Cancelled by cancelRequest');
+        cancelReq.controller.abort('Cancelled by cancelRequest');
       } catch {
         // 忽略取消错误
       }
@@ -156,7 +166,7 @@ export class RequestManager {
     // 取消并清空 preventPending
     for (const req of this.preventPending.values()) {
       try {
-        req.cancelSource.cancel('Cleared by clearAll');
+        req.controller.abort('Cleared by clearAll');
       } catch {
         // 忽略取消错误
       }
@@ -166,7 +176,7 @@ export class RequestManager {
     // 取消并清空 cancelPending
     for (const req of this.cancelPending.values()) {
       try {
-        req.cancelSource.cancel('Cleared by clearAll');
+        req.controller.abort('Cleared by clearAll');
       } catch {
         // 忽略取消错误
       }

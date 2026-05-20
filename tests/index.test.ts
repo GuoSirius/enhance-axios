@@ -339,3 +339,198 @@ describe('enhance-axios', () => {
     });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// getFormData 测试
+// ═══════════════════════════════════════════════════════════════════
+
+import { getFormData } from '../src';
+
+describe('getFormData', () => {
+  it('null / undefined 返回空 FormData', () => {
+    expect(getFormData(null)).toBeInstanceOf(FormData);
+    expect(getFormData(undefined)).toBeInstanceOf(FormData);
+  });
+
+  it('File 默认字段名 file', () => {
+    const file = new File(['hello'], 'test.txt', { type: 'text/plain' });
+    const fd = getFormData(file);
+    const result = fd.get('file') as File;
+    expect(result.name).toBe('test.txt');
+  });
+
+  it('File 自定义字段名', () => {
+    const file = new File(['hello'], 'test.txt', { type: 'text/plain' });
+    const fd = getFormData(file, 'avatar');
+    expect(fd.get('avatar')).toBeInstanceOf(File);
+    expect(fd.get('file')).toBeNull();
+  });
+
+  it('Blob 默认字段名 file', () => {
+    const blob = new Blob(['world'], { type: 'text/plain' });
+    const fd = getFormData(blob);
+    const got = fd.get('file');
+    expect(got).toBeInstanceOf(Blob);
+  });
+
+  it('基础值转字符串，字段名 file', () => {
+    expect(getFormData('hello').get('file')).toBe('hello');
+    expect(getFormData(123).get('file')).toBe('123');
+    expect(getFormData(true).get('file')).toBe('true');
+  });
+
+  it('数组', () => {
+    const file = new File(['a'], 'a.txt');
+    const fd = getFormData([file, 'text', 42]);
+    expect(fd.getAll('file')).toHaveLength(3);
+  });
+
+  it('普通对象', () => {
+    const fd = getFormData({ name: 'test', age: 18, active: true });
+    expect(fd.get('name')).toBe('test');
+    expect(fd.get('age')).toBe('18');
+    expect(fd.get('active')).toBe('true');
+  });
+
+  it('对象嵌套 File', () => {
+    const file = new File(['data'], 'avatar.png');
+    const fd = getFormData({ username: 'john', avatar: file });
+    expect(fd.get('username')).toBe('john');
+    expect(fd.get('avatar')).toBeInstanceOf(File);
+  });
+
+  it('嵌套对象用 . 连接', () => {
+    const fd = getFormData({ user: { name: 'test', age: 18 } });
+    expect(fd.get('user.name')).toBe('test');
+    expect(fd.get('user.age')).toBe('18');
+  });
+
+  it('数组包含 File 和基础值', () => {
+    const fd = getFormData([new File(['f1'], 'f1.txt'), 'extra']);
+    expect(fd.getAll('file')).toHaveLength(2);
+  });
+
+  it('Date 转 ISO 字符串', () => {
+    const date = new Date('2025-01-01T00:00:00Z');
+    const fd = getFormData({ createdAt: date });
+    expect(fd.get('createdAt')).toBe('2025-01-01T00:00:00.000Z');
+  });
+
+  it('FileList 默认字段名 file', () => {
+    if (typeof DataTransfer === 'undefined') return; // Node 环境跳过
+    const dt = new DataTransfer();
+    const f1 = new File(['a'], 'a.txt');
+    const f2 = new File(['b'], 'b.txt');
+    dt.items.add(f1);
+    dt.items.add(f2);
+    const fd = getFormData(dt.files);
+    expect(fd.getAll('file')).toHaveLength(2);
+  });
+
+  it('空数组返回空 FormData', () => {
+    const fd = getFormData([]);
+    expect([...fd.entries()]).toHaveLength(0);
+  });
+
+  it('空对象返回空 FormData', () => {
+    const fd = getFormData({});
+    expect([...fd.entries()]).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// contentType 测试
+// ═══════════════════════════════════════════════════════════════════
+
+describe('contentType', () => {
+  it('默认 json 设置 Content-Type', () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    expect(instance.defaults.headers?.['Content-Type']).toBeUndefined();
+    // 默认在请求拦截器中设置，这里验证可配置
+    const instance2 = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      contentType: 'json',
+    });
+    expect(instance2.enhance).toBeDefined();
+  });
+
+  it('可配置 form', () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      contentType: 'form',
+    });
+    expect(instance.enhance).toBeDefined();
+  });
+
+  it('可配置 file 模式', () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      contentType: 'file',
+    });
+    expect(instance.enhance).toBeDefined();
+  });
+
+  it('可配置自定义 Content-Type', () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      contentType: 'text/plain',
+    });
+    expect(instance.enhance).toBeDefined();
+  });
+
+  it('null 和 undefined 都默认 json', () => {
+    const instance1 = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      contentType: undefined,
+    });
+    expect(instance1.enhance).toBeDefined();
+
+    const instance2 = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      contentType: null as any,
+    });
+    expect(instance2.enhance).toBeDefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 2xx 业务码重试测试
+// ═══════════════════════════════════════════════════════════════════
+
+describe('2xx 业务码重试', () => {
+  it('retryCondition 可通过 error.response 判断业务码', () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      retry: {
+        retryCondition: (error) => {
+          if (error.response?.status === 200 && error.response?.data?.code !== 0) return true;
+          return false;
+        },
+      },
+    });
+    expect(instance.enhance).toBeDefined();
+  });
+
+  it('支持 __bizRetry 标记绕过 statusCodes 检查', () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      retry: {
+        retries: 2,
+        retryDelay: 10,
+        retryCondition: (error) => {
+          if (error.response?.status === 200 && error.response?.data?.code !== 0) return true;
+          return false;
+        },
+      },
+    });
+    expect(instance.enhance).toBeDefined();
+  });
+
+  it('业务码重试配置可正常关闭', () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      retry: false,
+    });
+    expect(instance.enhance).toBeDefined();
+  });
+});

@@ -4,6 +4,29 @@
 
 // 引入 axios 类型
 import type { AxiosRequestConfig, AxiosError } from 'axios';
+import type { RequestManager } from '../core/requestManager';
+
+// ════════════════════════════════════════════════════════════════════════════════
+// 基础类型
+// ════════════════════════════════════════════════════════════════════════════════
+
+export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
+
+/**
+ * Content-Type 简化配置
+ *
+ * - 'json': application/json;charset=UTF-8
+ * - 'form': application/x-www-form-urlencoded
+ * - 'file': multipart/form-data（当 data 为 FormData 时不设置，交由浏览器自动处理）
+ * - 其他字符串：直接用作 Content-Type 值
+ */
+export type ContentType = 'json' | 'form' | 'file' | (string & {});
+
+export const CONTENT_TYPE_MAP: Record<string, string> = {
+  json: 'application/json;charset=UTF-8',
+  form: 'application/x-www-form-urlencoded',
+  file: 'multipart/form-data',
+};
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 配置接口
@@ -84,8 +107,8 @@ export interface PendingRequest {
   key: string;
   /** 请求配置 */
   config: AxiosRequestConfig;
-  /** CancelTokenSource，用于取消请求 */
-  cancelSource: { cancel: (reason?: string) => void };
+  /** AbortController，用于取消请求 */
+  controller: AbortController;
   /** 请求的 Promise */
   promise: Promise<unknown>;
   /** 请求创建时间戳 */
@@ -103,7 +126,7 @@ export interface PendingRequest {
  */
 export interface EnhanceInstance {
   /** 请求管理器 */
-  requestManager: any;
+  requestManager: RequestManager;
   /** 取消所有 pending 请求 */
   clearAll: () => void;
   /** 取消指定请求 */
@@ -161,6 +184,21 @@ export type RetryOption =
   | number;
 
 // ════════════════════════════════════════════════════════════════════════════════
+// 内部类型（归一化后的配置，可选字段已填充默认值）
+// ════════════════════════════════════════════════════════════════════════════════
+
+type RequiredKeys<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
+
+export type InternalPreventConfig = RequiredKeys<PreventDuplicateConfig, 'enabled' | 'intervalMs'>;
+
+export type InternalCancelConfig = RequiredKeys<CancelRequestConfig, 'enabled'>;
+
+export type InternalRetryConfig = RequiredKeys<
+  RetryConfig,
+  'enabled' | 'retries' | 'retryDelay' | 'retryCondition' | 'exponential' | 'maxDelay' | 'statusCodes'
+>;
+
+// ════════════════════════════════════════════════════════════════════════════════
 // AxiosRequestConfig 扩展
 // ════════════════════════════════════════════════════════════════════════════════
 
@@ -170,6 +208,8 @@ export type RetryOption =
  * 扩展了 preventDuplicate、cancelRequest 和 retry 字段
  */
 export interface CreateEnhanceOptions extends AxiosRequestConfig {
+  /** Content-Type 简化配置，默认 'json' */
+  contentType?: ContentType;
   /** 防重复提交配置 */
   preventDuplicate?: PreventDuplicateOption;
   /** 取消请求配置 */
@@ -185,6 +225,8 @@ export interface CreateEnhanceOptions extends AxiosRequestConfig {
 // 扩展 axios 的 AxiosRequestConfig 类型
 declare module 'axios' {
   interface AxiosRequestConfig {
+    /** Content-Type 简化配置，默认 'json' */
+    contentType?: ContentType;
     /** 防重复提交配置 */
     preventDuplicate?: PreventDuplicateOption;
     /** 取消请求配置 */

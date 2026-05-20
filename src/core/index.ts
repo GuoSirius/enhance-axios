@@ -15,18 +15,19 @@
  * ════════════════════════════════════════════════════════════════════════════════
  *
  * 【默认策略】
- * - POST/PUT/PATCH 等使用 data 的请求：默认启用防重复提交
- * - GET/DELETE 等使用 params 的请求：默认启用取消请求
+ * - 防重复：默认 methods 为 POST/PUT/PATCH/DELETE（使用 data 的请求）
+ * - 取消请求：默认 methods 为 GET（使用 params 的请求）
+ * - 两者默认互不重叠，各自独立控制生效方法
  *
- * 【为什么不能同时使用】
+ * 【为什么默认分开】
  * - 防重复：返回已有请求的 Promise，阻止当前请求继续执行
  * - 取消请求：取消已有请求，继续执行当前请求
- * 两者同时使用会产生冲突，且业务场景中通常只需要其中一种
+ * 两者作用相反，默认分到不同方法避免冲突
  *
  * 【优先级规则】
- * 1. 请求级别配置优先于实例级别配置
- * 2. 如果请求明确指定了 preventDuplicate 或 cancelRequest，则使用请求配置
- * 3. 如果请求未指定，则使用实例默认策略
+ * 1. 请求级配置优先于实例级配置
+ * 2. 通过 methods 数组 + shouldApply 判断当前请求是否生效
+ * 3. config.signal 被内部设置——通过 AbortController 控制请求取消
  *
  * ════════════════════════════════════════════════════════════════════════════════
  *                           请求生命周期
@@ -56,14 +57,19 @@
  *
  *  成功响应 (2xx)
  *  ──────────────
- *  • 清理 pending 记录
+ *  • resolve deferred Promise（让防重复等待者拿到响应）
+ *  • 清理 pendingReturns 和 requestManager 记录
  *  • 返回响应数据
  *
- *  错误响应 (非 2xx)
- *  ──────────────────
- *  • 防重复处理：检查 __preventReturn，返还原有请求的 Promise
- *  • 重试处理：检查 retryCondition 是否应该重试
- *  • 清理 pending 记录
+ *  错误响应 (非 2xx / 网络错误 / 取消)
+ *  ──────────────────────────────────
+ *  • 情况 1（防重复拦截）：返回原请求的 deferred.promise
+ *  • 情况 2（请求被取消）：reject deferred，清理资源，抛出错误
+ *  • 情况 3（满足重试条件）：
+ *    - 延迟后重试
+ *    - 只清理 requestManager（保留 deferred 供重试链复用）
+ *    - 增加 retryCount 后重新发起请求
+ *  • 情况 4（不满足重试/重试耗尽）：reject deferred，清理资源，抛出错误
  *
  * ════════════════════════════════════════════════════════════════════════════════
  *                           失败场景分析
@@ -83,17 +89,20 @@
  *                           清理时机说明
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * | 操作                   | pending 清理 | 说明                              |
- * |------------------------|--------------|-----------------------------------|
- * | 成功响应               | ✓            | 请求完成，正常清理                 |
- * | 重试成功               | ✓            | 最后一次请求完成                   |
- * | 重试耗尽               | ✓            | 不再重试时清理                     |
- * | 防重复拦截             | ✗            | 复用已有请求，不清理               |
- * | cancelRequest          | ✓            | 主动取消时清理                     |
- * | clearAll()             | ✓            | 清空所有 pending                   |
+ * | 操作                   | pendingReturns | requestManager | deferred       | 说明                              |
+ * |------------------------|----------------|----------------|----------------|-----------------------------------|
+ * | 成功响应               | ✓ 删除         | ✓ 取消注册     | ✓ resolve     | 请求完成，通知等待者               |
+ * | 重试前                 | ✗ 保留         | ✓ 取消注册     | ✗ 保留        | 保留 deferred 供重试链复用         |
+ * | 重试成功               | ✓ 删除         | ✓ 取消注册     | ✓ resolve     | 最终成功，通知等待者               |
+ * | 重试耗尽               | ✓ 删除         | ✓ 取消注册     | ✓ reject      | 最终失败，通知等待者               |
+ * | 防重复拦截             | ✗              | ✗              | ✗             | 复用已有请求的 deferred            |
+ * | 请求被取消             | ✓ 删除         | ✓ 取消注册     | ✓ reject      | 请求被取消，终止等待               |
+ * | cancelRequest 主动取消  | (case 2 处理)  | ✓ 取消         | ✓ reject      | 错误处理器 case 2 负责清理         |
+ * | clearAll()             | ✓ 全部删除     | ✓ 全部清空     | ✓ reject 全部 | 批量终止所有等待                   |
+ * | 请求拦截器异常          | ✓ 删除         | ✓ 取消注册     | ✓ reject      | 请求未能发出                        |
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosError, CancelTokenSource } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { RequestManager } from './requestManager';
 import { resolveRequestKey } from '../utils';
 import type {
@@ -103,67 +112,32 @@ import type {
   CancelRequestConfig,
   RetryConfig,
   PendingRequest,
+  PreventDuplicateOption,
+  CancelRequestOption,
+  RetryOption,
+  InternalPreventConfig,
+  InternalCancelConfig,
+  InternalRetryConfig,
+  RequestMethod,
 } from '../types';
+import { CONTENT_TYPE_MAP } from '../types';
 
 // ════════════════════════════════════════════════════════════════════════════════
-// 类型定义
-// ════════════════════════════════════════════════════════════════════════════════
-
-/**
- * 内部防重复配置
- */
-interface InternalPreventConfig {
-  enabled: boolean;
-  requestKey?: string | ((config: AxiosRequestConfig) => string);
-  methods?: string[];
-  intervalMs: number;
-}
-
-/**
- * 内部取消请求配置
- */
-interface InternalCancelConfig {
-  enabled: boolean;
-  requestKey?: string | ((config: AxiosRequestConfig) => string);
-  methods?: string[];
-}
-
-/**
- * 内部重试配置
- */
-interface InternalRetryConfig {
-  enabled: boolean;
-  retries: number;
-  retryDelay: number;
-  retryCondition: (error: AxiosError) => boolean;
-  exponential: boolean;
-  maxDelay: number;
-  methods?: string[];
-  statusCodes: number[];
-}
-
-/**
- * 请求方法类型
- */
-type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
-
-/**
- * 判断请求是否使用 data（而非 params）
- */
-const DATA_METHODS: RequestMethod[] = ['POST', 'PUT', 'PATCH'];
-
-// ════════════════════════════════════════════════════════════════════════════════
-// 存储防重复请求的 Promise
+// 存储防重复请求的延迟 Promise
 // ════════════════════════════════════════════════════════════════════════════════
 
 /**
- * 存储防重复请求的 Promise
- * key: requestKey
- * value: 原请求的 Promise
+ * 延迟 Promise 结构
  *
- * 使用场景：当检测到重复请求时，阻止当前请求并返回原请求的 Promise
+ * 用于防重复提交：当检测到重复请求时，后续请求可以等待原始请求的结果。
+ * Promise 会在原始请求（包括重试）最终完成时被 resolve/reject。
+ * 重试链会复用同一个 deferred，保证后续请求拿到最终结果而非中间失败。
  */
-const pendingReturns = new Map<string, Promise<unknown>>();
+interface PendingDeferred {
+  resolve: (value: unknown) => void;
+  reject: (reason: unknown) => void;
+  promise: Promise<unknown>;
+}
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 默认配置
@@ -174,6 +148,7 @@ const pendingReturns = new Map<string, Promise<unknown>>();
  */
 const DEFAULT_PREVENT_CONFIG: InternalPreventConfig = {
   enabled: true,
+  methods: ['POST', 'PUT', 'PATCH', 'DELETE'],
   intervalMs: 1000,
 };
 
@@ -182,6 +157,7 @@ const DEFAULT_PREVENT_CONFIG: InternalPreventConfig = {
  */
 const DEFAULT_CANCEL_CONFIG: InternalCancelConfig = {
   enabled: true,
+  methods: ['GET'],
 };
 
 /**
@@ -210,13 +186,6 @@ const DEFAULT_RETRY_CONFIG: InternalRetryConfig = {
 // ════════════════════════════════════════════════════════════════════════════════
 // 工具函数
 // ════════════════════════════════════════════════════════════════════════════════
-
-/**
- * 判断请求方法是否使用 data（POST/PUT/PATCH）
- */
-function isDataMethod(method?: string): boolean {
-  return DATA_METHODS.includes(method?.toUpperCase() as RequestMethod);
-}
 
 /**
  * 检查 HTTP 方法是否在允许列表中
@@ -254,13 +223,6 @@ function calculateRetryDelay(
 // ════════════════════════════════════════════════════════════════════════════════
 
 /**
- * 判断配置是否为明确的 false（用于区分未设置和明确禁用）
- */
-function isExplicitFalse(config: any): boolean {
-  return config === false || config === 'false';
-}
-
-/**
  * 判断配置是否已设置（不是 undefined/null）
  */
 function isConfigSet(config: any): boolean {
@@ -280,7 +242,7 @@ function isConfigSet(config: any): boolean {
  * - undefined/null: 视为未传递，使用默认值
  */
 function normalizePreventConfig(
-  config: PreventDuplicateConfig | boolean | string | Function | number | string[] | undefined,
+  config: PreventDuplicateOption | undefined,
   defaults: InternalPreventConfig
 ): InternalPreventConfig {
   // undefined/null 视为未传递
@@ -330,7 +292,7 @@ function normalizePreventConfig(
  * 支持的输入格式同 normalizePreventConfig
  */
 function normalizeCancelConfig(
-  config: CancelRequestConfig | boolean | string | Function | string[] | undefined,
+  config: CancelRequestOption | undefined,
   defaults: InternalCancelConfig
 ): InternalCancelConfig {
   if (!isConfigSet(config)) {
@@ -372,7 +334,7 @@ function normalizeCancelConfig(
  * - undefined/null: 视为未传递，使用默认值
  */
 function normalizeRetryConfig(
-  config: RetryConfig | boolean | number | undefined,
+  config: RetryOption | undefined,
   defaults: InternalRetryConfig
 ): InternalRetryConfig {
   if (!isConfigSet(config)) {
@@ -402,36 +364,6 @@ function normalizeRetryConfig(
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// 清理函数
-// ════════════════════════════════════════════════════════════════════════════════
-
-/**
- * 清理 pending 记录
- *
- * @param config 请求配置
- * @param requestManager 请求管理器
- * @param requestKey 请求标识（可选，用于精确清理）
- *
- * 清理时机：
- * 1. 响应成功
- * 2. 重试成功
- * 3. 重试次数用尽
- * 4. 不需要重试的错误
- */
-function cleanupPendingRecord(
-  config: AxiosRequestConfig,
-  requestManager: RequestManager,
-  requestKey?: string
-): void {
-  // 优先使用传入的 requestKey，其次使用 config 中的 __pendingKey
-  const key = requestKey || (config as any).__pendingKey;
-  if (key) {
-    pendingReturns.delete(key);
-    requestManager.unregisterRequest(key, 'prevent');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════════
 // 核心函数
 // ════════════════════════════════════════════════════════════════════════════════
 
@@ -439,68 +371,27 @@ function cleanupPendingRecord(
  * 获取有效的增强配置
  *
  * 优先级规则：
- * 1. 如果请求明确设置了 preventDuplicate（不是 undefined），使用请求配置
- * 2. 如果请求未设置，根据方法类型决定默认策略
- *    - POST/PUT/PATCH：使用防重复
- *    - GET/DELETE 等：使用取消请求
- * 3. 实例默认配置作为最终回退
+ * 1. 请求级配置优先于实例级配置（通过 methods 数组控制生效方法）
+ * 2. 未设置时使用实例默认配置
+ * 3. 默认 methods：防重复 -> POST/PUT/PATCH，取消请求 -> GET/DELETE/HEAD/OPTIONS
  *
  * @param config 请求配置
  * @param instanceDefaults 实例默认配置
- * @param method 请求方法
  */
 function getEffectiveConfig(
   config: AxiosRequestConfig,
   instanceDefaults: {
     prevent: InternalPreventConfig;
     cancel: InternalCancelConfig;
-  },
-  method: string
+  }
 ): { prevent: InternalPreventConfig; cancel: InternalCancelConfig } {
-  // 获取请求级别的配置
-  const requestPrevent = config.preventDuplicate;
-  const requestCancel = config.cancelRequest;
+  const prevent = isConfigSet(config.preventDuplicate)
+    ? normalizePreventConfig(config.preventDuplicate, instanceDefaults.prevent)
+    : { ...instanceDefaults.prevent };
 
-  // 检查是否明确禁用
-  const preventExplicitDisabled = isExplicitFalse(requestPrevent);
-  const cancelExplicitDisabled = isExplicitFalse(requestCancel);
-
-  let prevent: InternalPreventConfig;
-  let cancel: InternalCancelConfig;
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // 步骤 1：确定防重复配置
-  // ─────────────────────────────────────────────────────────────────────────
-  if (preventExplicitDisabled) {
-    // 明确禁用防重复
-    prevent = { ...DEFAULT_PREVENT_CONFIG, enabled: false };
-  } else if (isConfigSet(requestPrevent)) {
-    // 使用请求配置
-    prevent = normalizePreventConfig(requestPrevent, DEFAULT_PREVENT_CONFIG);
-  } else if (isDataMethod(method)) {
-    // 默认策略：使用 data 的请求启用防重复
-    prevent = { ...instanceDefaults.prevent };
-  } else {
-    // 默认策略：其他请求禁用防重复
-    prevent = { ...DEFAULT_PREVENT_CONFIG, enabled: false };
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // 步骤 2：确定取消请求配置
-  // ─────────────────────────────────────────────────────────────────────────
-  if (cancelExplicitDisabled) {
-    // 明确禁用取消请求
-    cancel = { ...DEFAULT_CANCEL_CONFIG, enabled: false };
-  } else if (isConfigSet(requestCancel)) {
-    // 使用请求配置
-    cancel = normalizeCancelConfig(requestCancel, DEFAULT_CANCEL_CONFIG);
-  } else if (!isDataMethod(method)) {
-    // 默认策略：不使用 data 的请求启用取消请求
-    cancel = { ...instanceDefaults.cancel };
-  } else {
-    // 默认策略：使用 data 的请求禁用取消请求
-    cancel = { ...DEFAULT_CANCEL_CONFIG, enabled: false };
-  }
+  const cancel = isConfigSet(config.cancelRequest)
+    ? normalizeCancelConfig(config.cancelRequest, instanceDefaults.cancel)
+    : { ...instanceDefaults.cancel };
 
   return { prevent, cancel };
 }
@@ -545,16 +436,23 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 初始化请求管理器
+  // 初始化请求管理器 和 延迟 Promise 存储
   // ─────────────────────────────────────────────────────────────────────────
   const requestManager = new RequestManager();
+  const pendingReturns = new Map<string, PendingDeferred>();
 
   // ─────────────────────────────────────────────────────────────────────────
   // 暴露给用户的 enhance API
   // ─────────────────────────────────────────────────────────────────────────
   const enhanceInstance: EnhanceInstance = {
     requestManager,
-    clearAll: () => requestManager.clearAll(),
+    clearAll: () => {
+      for (const [key, deferred] of pendingReturns) {
+        try { deferred.reject(new Error('All requests cleared')); } catch { }
+      }
+      pendingReturns.clear();
+      requestManager.clearAll();
+    },
     cancelRequest: (key: string) => requestManager.cancelRequest(key),
     getRequestStatus: (key: string) => requestManager.getRequestStatus(key),
   };
@@ -569,10 +467,34 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       // ─────────────────────────────────────────────────────────────────────
       // 步骤 1：获取有效的增强配置
       // ─────────────────────────────────────────────────────────────────────
-      const { prevent, cancel } = getEffectiveConfig(config, { prevent: defaultPrevent, cancel: defaultCancel }, method);
+      const { prevent, cancel } = getEffectiveConfig(config, { prevent: defaultPrevent, cancel: defaultCancel });
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 2：处理取消请求
+      // 步骤 2：处理 Content-Type
+      // ─────────────────────────────────────────────────────────────────────
+      // 仅在未显式设置 Content-Type 时处理
+      // 'json' → application/json;charset=UTF-8（默认）
+      // 'form' → application/x-www-form-urlencoded
+      // 'file' → 不设置（multipart/form-data 需要 boundary，交由浏览器自动处理）
+      // 自定义字符串 → 直接使用
+      if (!config.headers?.['Content-Type'] && !config.headers?.['content-type']) {
+        const contentType = config.contentType;
+
+        // 'file' 模式下不设置 Content-Type（浏览器自动带 boundary）
+        if (contentType === 'file') {
+          // skip
+        } else if (contentType != null) {
+          config.headers = config.headers || {};
+          config.headers['Content-Type'] = CONTENT_TYPE_MAP[contentType] || contentType;
+        } else {
+          // null / undefined → 默认 json
+          config.headers = config.headers || {};
+          config.headers['Content-Type'] = CONTENT_TYPE_MAP.json;
+        }
+      }
+
+      // ─────────────────────────────────────────────────────────────────────
+      // 步骤 3：处理取消请求
       // ─────────────────────────────────────────────────────────────────────
       // 逻辑：检查是否有相同 key 的旧请求，有则取消
       // 目的：确保只有最新发出的请求有效（搜索场景）
@@ -600,20 +522,20 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
           const now = Date.now();
           // 如果请求还在 intervalMs 内，则返回已有请求的 Promise
           if (now - existing.timestamp < prevent.intervalMs) {
-            const pendingPromise = pendingReturns.get(key);
-            if (pendingPromise) {
-              // 生成取消令牌用于阻止当前请求
-              const source = axios.CancelToken.source();
-              (config as any).__cancelTokenSource = source;
-              source.cancel('Request prevented by duplicate');
+            const deferred = pendingReturns.get(key);
+            if (deferred) {
+              // 阻止当前请求：通过 AbortController 中止本次请求
+              const controller = new AbortController();
+              config.signal = controller.signal;
+              controller.abort('Request prevented by duplicate');
 
-              // 保存 pending key，用于响应拦截器清理
+              // 保存 key，用于响应拦截器中可能需要的清理
               (config as any).__pendingKey = key;
 
-              // 创建错误对象，用于在响应拦截器中处理
+              // 创建错误对象，携带原请求的 Promise 给调用方
               const error = new Error('Request prevented by duplicate') as AxiosError;
               (error as any).__preventReturn = true;
-              (error as any).__pendingPromise = existing.promise;
+              (error as any).__pendingPromise = deferred.promise;
               (error as any).__pendingKey = key;
               error.config = config;
 
@@ -629,24 +551,44 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       // 为防重复功能注册请求（取消请求不需要注册，因为会继续执行）
       if (prevent.enabled && shouldApply(method, prevent.methods)) {
         const key = resolveRequestKey(config, prevent.requestKey);
-        const source = axios.CancelToken.source();
-        (config as any).__cancelToken = source.token;
-        (config as any).__cancelSource = source;
+        const controller = new AbortController();
+        config.signal = controller.signal;
+        (config as any).__controller = controller;
         (config as any).__pendingKey = key;
 
-        // 创建 Promise 并保存，用于防重复拦截
-        const requestPromise = new Promise<unknown>((resolve, reject) => {
-          // 这个 Promise 会在请求完成时 resolve/reject
-          // 我们需要在响应拦截器中替换它
-        });
-        pendingReturns.set(key, requestPromise);
+        // 创建延迟 Promise（如果重试链已存在则复用，保证后续请求等待最终结果）
+        let deferred = pendingReturns.get(key);
+        if (!deferred) {
+          let resolveFn: (value: unknown) => void;
+          let rejectFn: (reason: unknown) => void;
+          const promise = new Promise<unknown>((resolve, reject) => {
+            resolveFn = resolve;
+            rejectFn = reject;
+          });
+          deferred = { resolve: resolveFn!, reject: rejectFn!, promise };
+          pendingReturns.set(key, deferred);
+        }
 
-        requestManager.registerRequest(key, 'prevent', source, requestPromise);
+        requestManager.registerRequest(key, 'prevent', controller, deferred.promise);
       }
 
       return config;
     },
-    (error) => Promise.reject(error)
+    (error) => {
+      const config = error?.config || error?.request?.config;
+      if (config) {
+        const key = (config as any).__pendingKey;
+        if (key) {
+          const deferred = pendingReturns.get(key);
+          if (deferred) {
+            deferred.reject(error);
+            pendingReturns.delete(key);
+          }
+          requestManager.unregisterRequest(key, 'prevent');
+        }
+      }
+      return Promise.reject(error);
+    }
   );
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -657,26 +599,53 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
     // 成功响应处理 (2xx)
     // ─────────────────────────────────────────────────────────────────────────
     (response) => {
-      // 清理 pending 记录
-      cleanupPendingRecord(response.config, requestManager);
+      const config = response.config;
 
-      // 清理 cancelSource（如果有）
-      const cancelSource = (response.config as any).__cancelSource;
-      if (cancelSource) {
-        try { cancelSource.cancel('Request completed'); } catch {}
+      // ─────────────────────────────────────────────────────────────────────
+      // 检查业务码是否需要重试（2xx 响应但业务逻辑失败）
+      // ─────────────────────────────────────────────────────────────────────
+      const retryConfig = normalizeRetryConfig(config.retry, defaultRetry);
+      if (retryConfig.enabled && shouldApply(config.method, retryConfig.methods)) {
+        const syntheticError = new Error('Business logic error') as AxiosError;
+        syntheticError.config = config;
+        syntheticError.response = response;
+        syntheticError.isAxiosError = true;
+        (syntheticError as any).__bizRetry = true;
+
+        if (retryConfig.retryCondition(syntheticError)) {
+          // 清理 requestManager，保留 deferred 供重试链复用
+          const key = (config as any).__pendingKey;
+          if (key) {
+            requestManager.unregisterRequest(key, 'prevent');
+          }
+          throw syntheticError;
+        }
+      }
+
+      // ─────────────────────────────────────────────────────────────────────
+      // 正常成功：resolve deferred，清理资源
+      // ─────────────────────────────────────────────────────────────────────
+      const key = (config as any).__pendingKey;
+
+      if (key) {
+        const deferred = pendingReturns.get(key);
+        if (deferred) {
+          deferred.resolve(response);
+          pendingReturns.delete(key);
+        }
+        requestManager.unregisterRequest(key, 'prevent');
       }
 
       return response;
     },
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 错误响应处理 (非 2xx)
+    // 错误响应处理 (非 2xx / 网络错误 / 请求取消 / 防重复拦截)
     // ─────────────────────────────────────────────────────────────────────────
     async (error) => {
-      // 获取原始请求配置
       const config = error.config || (error as any).config;
 
-      // 如果没有配置，说明是致命错误（如网络完全断开），直接抛出
+      // 没有 config 说明是致命错误（如网络完全断开），直接抛出
       if (!config) {
         return Promise.reject(error);
       }
@@ -684,19 +653,27 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       // ─────────────────────────────────────────────────────────────────────
       // 情况 1：防重复拦截返回
       // ─────────────────────────────────────────────────────────────────────
-      // 说明：当前请求被阻止，需要返回原请求的 Promise
+      // 当前请求被阻止，返回原请求的 deferred.promise
+      // 注意：不清理 pending，原始请求还在进行
       if ((error as any)?.__preventReturn && (error as any)?.__pendingPromise) {
-        // 注意：这里不清理 pending，因为原请求还在进行
         return (error as any).__pendingPromise;
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 情况 2：请求被取消（cancelToken 取消）
+      // 情况 2：请求被取消（AbortController 取消 / cancelToken 取消）
       // ─────────────────────────────────────────────────────────────────────
-      // 说明：可能是 cancelRequest 取消的旧请求，不需要重试
+      // 可能是 cancelRequest 取消的旧请求，也可能是其他原因
+      // 取消操作不需要重试
       if (axios.isCancel(error)) {
-        // 清理 pending 记录
-        cleanupPendingRecord(config, requestManager);
+        const key = (config as any).__pendingKey;
+        if (key) {
+          const deferred = pendingReturns.get(key);
+          if (deferred) {
+            deferred.reject(error);
+            pendingReturns.delete(key);
+          }
+          requestManager.unregisterRequest(key, 'prevent');
+        }
         return Promise.reject(error);
       }
 
@@ -706,46 +683,40 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       const retryConfig = normalizeRetryConfig(config.retry, defaultRetry);
 
       if (retryConfig.enabled && shouldApply(config.method, retryConfig.methods)) {
-        // 获取当前重试次数
         const retryCount = (config as any).__retryCount || 0;
 
-        // 检查是否应该重试
-        // 条件 1：retryCondition 返回 true（自定义判断）
-        // 条件 2：重试次数未超限
-        // 条件 3：HTTP 状态码在允许列表中（如果有状态码）
         const shouldRetry =
           retryConfig.retryCondition(error) &&
           retryCount < retryConfig.retries &&
-          (!error.response || !retryConfig.statusCodes.length || retryConfig.statusCodes.includes(error.response.status));
+          ((error as any).__bizRetry || !error.response || !retryConfig.statusCodes.length || retryConfig.statusCodes.includes(error.response.status));
 
         if (shouldRetry) {
-          // 计算延迟时间
           const delay = calculateRetryDelay(retryConfig, retryCount);
-
-          // 等待延迟后重试
           await new Promise((resolve) => setTimeout(resolve, delay));
 
-          // 清理之前的 pending 记录（避免与重试后的记录混淆）
-          cleanupPendingRecord(config, requestManager);
+          // 清理 requestManager 中的旧记录（避免与即将注册的新记录冲突）
+          // 但保留 pendingReturns 中的 deferred，让重试链复用同一个 deferred
+          const key = (config as any).__pendingKey;
+          if (key) {
+            requestManager.unregisterRequest(key, 'prevent');
+          }
 
-          // 增加重试计数
           (config as any).__retryCount = retryCount + 1;
-
-          // 重新发起请求
           return instance.request(config);
         }
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 情况 4：清理并抛出错误
+      // 情况 4：不需要重试或重试耗尽，清理并抛出错误
       // ─────────────────────────────────────────────────────────────────────
-      // 说明：不需要重试的错误，清理 pending 记录后抛出
-      cleanupPendingRecord(config, requestManager);
-
-      // 清理 cancelSource
-      const cancelSource = (config as any).__cancelSource;
-      if (cancelSource) {
-        try { cancelSource.cancel('Request failed'); } catch {}
+      const key = (config as any).__pendingKey;
+      if (key) {
+        const deferred = pendingReturns.get(key);
+        if (deferred) {
+          deferred.reject(error);
+          pendingReturns.delete(key);
+        }
+        requestManager.unregisterRequest(key, 'prevent');
       }
 
       return Promise.reject(error);
@@ -788,10 +759,3 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
 }
 
 export { createEnhanceInstance };
-export type {
-  CreateEnhanceOptions,
-  EnhanceInstance,
-  PreventDuplicateConfig,
-  CancelRequestConfig,
-  RetryConfig,
-} from '../types';

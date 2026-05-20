@@ -124,6 +124,11 @@ const responses = {
     });
   },
 
+  // 网络错误模拟 - 直接关闭连接
+  'network-error': (req, res) => {
+    res.destroy();  // 直接断开，模拟网络错误
+  },
+
   // 用户列表 - 用于测试 params
   users: (req, res) => {
     const page = parseInt(req.query.page) || 1;

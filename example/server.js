@@ -138,6 +138,7 @@ server.listen(PORT, () => {
   console.log('  ║  GET  /api/business-error           ║');
   console.log('  ║  GET  /api/slow                     ║');
   console.log('  ║  GET  /api/success                  ║');
+  console.log('  ║  GET  /api/network-error            ║');
   console.log('  ║  GET  /api/users                    ║');
   console.log('  ╚══════════════════════════════════════╝');
   console.log('');
