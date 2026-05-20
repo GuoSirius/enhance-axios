@@ -1,11 +1,19 @@
 import type { AxiosRequestConfig } from 'axios';
 
+function toPlain(value: unknown): unknown {
+  if (value == null) return value;
+  if (typeof URLSearchParams !== 'undefined' && value instanceof URLSearchParams) {
+    return Object.fromEntries(value);
+  }
+  return value;
+}
+
 /**
  * 获取嵌套属性的值
  */
-export function getNestedValue(obj: any, path: string): any {
+export function getNestedValue(obj: unknown, path: string): unknown {
   if (!path) return obj;
-  return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+  return path.split('.').reduce<unknown>((o: any, k) => (o == null ? undefined : o[k]), obj);
 }
 
 /**
@@ -16,8 +24,8 @@ export function resolveTemplate(template: string, config: AxiosRequestConfig): s
   const context = {
     method: config.method?.toUpperCase() || 'GET',
     url: config.url || '',
-    params: config.params,
-    data: config.data,
+    params: toPlain(config.params),
+    data: toPlain(config.data),
   };
 
   return template.replace(/\$\{([^}]+)\}/g, (match, path) => {
@@ -35,8 +43,8 @@ export function generateDefaultKey(config: AxiosRequestConfig): string {
   const parts = [
     config.method?.toUpperCase() || 'GET',
     config.url || '',
-    config.params != null ? JSON.stringify(sortObject(config.params)) : '',
-    config.data != null ? JSON.stringify(sortObject(config.data)) : '',
+    config.params != null ? JSON.stringify(sortObject(toPlain(config.params))) : '',
+    config.data != null ? JSON.stringify(sortObject(toPlain(config.data))) : '',
   ];
   return hash(parts.join('|'));
 }
@@ -56,13 +64,14 @@ export function hash(str: string): string {
 /**
  * 对对象键进行排序（保证相同数据产生相同哈希）
  */
-function sortObject(obj: any): any {
+function sortObject(obj: unknown): unknown {
   if (obj == null || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(sortObject);
-  const sorted: Record<string, any> = {};
-  const keys = Object.keys(obj).sort();
+  const rec = obj as Record<string, unknown>;
+  const sorted: Record<string, unknown> = {};
+  const keys = Object.keys(rec).sort();
   for (const key of keys) {
-    sorted[key] = sortObject(obj[key]);
+    sorted[key] = sortObject(rec[key]);
   }
   return sorted;
 }
@@ -71,7 +80,10 @@ function sortObject(obj: any): any {
  * 解析 requestKey
  * 支持字符串模板、直接字符串、函数
  */
-export function resolveRequestKey(config: AxiosRequestConfig, keyTemplate?: any): string {
+export function resolveRequestKey(
+  config: AxiosRequestConfig,
+  keyTemplate?: string | ((config: AxiosRequestConfig) => string)
+): string {
   if (!keyTemplate) {
     return generateDefaultKey(config);
   }

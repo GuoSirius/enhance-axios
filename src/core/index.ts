@@ -111,7 +111,6 @@ import type {
   PreventDuplicateConfig,
   CancelRequestConfig,
   RetryConfig,
-  PendingRequest,
   PreventDuplicateOption,
   CancelRequestOption,
   RetryOption,
@@ -191,7 +190,8 @@ const DEFAULT_RETRY_CONFIG: InternalRetryConfig = {
  * 检查 HTTP 方法是否在允许列表中
  */
 function shouldApply(method?: string, methods?: string[]): boolean {
-  if (!methods || methods.length === 0) return true;
+  if (!methods) return true;
+  if (methods.length === 0) return false;
   return methods.includes(method?.toUpperCase() || 'GET');
 }
 
@@ -362,14 +362,6 @@ function normalizeRetryConfig(
     return { ...defaults, enabled: true, statusCodes: config as number[] };
   }
 
-  if (typeof config === 'function') {
-    return { ...defaults, retryCondition: config as (error: AxiosError) => boolean };
-  }
-
-  if (Array.isArray(config)) {
-    return { ...defaults, statusCodes: config as number[] };
-  }
-
   return {
     enabled: (config as RetryConfig).enabled ?? defaults.enabled,
     retries: (config as RetryConfig).retries ?? defaults.retries,
@@ -394,7 +386,7 @@ function normalizeRetryConfig(
  * 优先级规则：
  * 1. 请求级配置优先于实例级配置（通过 methods 数组控制生效方法）
  * 2. 未设置时使用实例默认配置
- * 3. 默认 methods：防重复 -> POST/PUT/PATCH，取消请求 -> GET/DELETE/HEAD/OPTIONS
+ * 3. 默认 methods：防重复 -> POST/PUT/PATCH/DELETE，取消请求 -> GET
  *
  * @param config 请求配置
  * @param instanceDefaults 实例默认配置
@@ -415,6 +407,58 @@ function getEffectiveConfig(
     : { ...instanceDefaults.cancel };
 
   return { prevent, cancel };
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// 请求清理辅助
+// ════════════════════════════════════════════════════════════════════════════════
+
+function getPendingKey(config: AxiosRequestConfig): string | undefined {
+  return (config as any).__pendingKey;
+}
+function getCancelKey(config: AxiosRequestConfig): string | undefined {
+  return (config as any).__cancelKey;
+}
+
+/**
+ * 清理 requestManager 中的注册记录（不操作 deferred）
+ */
+function cleanupRegistered(config: AxiosRequestConfig, rm: RequestManager): void {
+  const pk = getPendingKey(config);
+  const ck = getCancelKey(config);
+  if (pk) rm.unregisterRequest(pk, 'prevent');
+  if (ck && ck !== pk) rm.unregisterRequest(ck, 'cancel');
+}
+
+/**
+ * 失败时：reject deferred + 清理
+ */
+function rejectAndCleanup(
+  config: AxiosRequestConfig, rm: RequestManager,
+  pr: Map<string, PendingDeferred>, reason: unknown
+): void {
+  const pk = getPendingKey(config);
+  const ck = getCancelKey(config);
+  if (pk) {
+    const df = pr.get(pk);
+    if (df) { df.reject(reason); pr.delete(pk); }
+    rm.unregisterRequest(pk, 'prevent');
+  }
+  if (ck && ck !== pk) rm.unregisterRequest(ck, 'cancel');
+}
+
+function resolveAndCleanup(
+  config: AxiosRequestConfig, rm: RequestManager,
+  pr: Map<string, PendingDeferred>, data: unknown
+): void {
+  const pk = getPendingKey(config);
+  const ck = getCancelKey(config);
+  if (pk) {
+    const df = pr.get(pk);
+    if (df) { df.resolve(data); pr.delete(pk); }
+    rm.unregisterRequest(pk, 'prevent');
+  }
+  if (ck && ck !== pk) rm.unregisterRequest(ck, 'cancel');
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -515,25 +559,16 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 3：处理取消请求
+      // 步骤 3：取消旧请求（同 key 的旧请求被中止）
       // ─────────────────────────────────────────────────────────────────────
-      // 逻辑：检查是否有相同 key 的旧请求，有则取消
-      // 目的：确保只有最新发出的请求有效（搜索场景）
-      // 注意：取消请求会继续执行当前请求
       if (cancel.enabled && shouldApply(method, cancel.methods)) {
         const key = resolveRequestKey(config, cancel.requestKey);
         requestManager.cancelRequest(key);
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 3：处理防重复提交
+      // 步骤 4：防重复检查（同 key 且在 intervalMs 内则阻止当前请求）
       // ─────────────────────────────────────────────────────────────────────
-      // 逻辑：
-      // 1. 生成 requestKey
-      // 2. 检查是否有相同 key 且在 intervalMs 内的请求
-      // 3. 有则阻止当前请求，返回已有请求的 Promise
-      // 目的：防止用户快速点击重复提交表单
-      // 注意：防重复会阻止当前请求，不会继续执行
       if (prevent.enabled && shouldApply(method, prevent.methods)) {
         const key = resolveRequestKey(config, prevent.requestKey);
 
@@ -567,47 +602,46 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 4：注册新请求
+      // 步骤 5：注册新请求（创建 AbortController 供后续 cancel/prevent 使用）
       // ─────────────────────────────────────────────────────────────────────
-      // 为防重复功能注册请求（取消请求不需要注册，因为会继续执行）
-      if (prevent.enabled && shouldApply(method, prevent.methods)) {
-        const key = resolveRequestKey(config, prevent.requestKey);
+      const needsPrevent = prevent.enabled && shouldApply(method, prevent.methods);
+      const needsCancel = cancel.enabled && shouldApply(method, cancel.methods);
+
+      if (needsPrevent || needsCancel) {
         const controller = new AbortController();
         config.signal = controller.signal;
         (config as any).__controller = controller;
-        (config as any).__pendingKey = key;
 
-        // 创建延迟 Promise（如果重试链已存在则复用，保证后续请求等待最终结果）
-        let deferred = pendingReturns.get(key);
-        if (!deferred) {
-          let resolveFn: (value: unknown) => void;
-          let rejectFn: (reason: unknown) => void;
-          const promise = new Promise<unknown>((resolve, reject) => {
-            resolveFn = resolve;
-            rejectFn = reject;
-          });
-          deferred = { resolve: resolveFn!, reject: rejectFn!, promise };
-          pendingReturns.set(key, deferred);
+        if (needsCancel) {
+          const cancelKey = resolveRequestKey(config, cancel.requestKey);
+          (config as any).__cancelKey = cancelKey;
+          requestManager.registerRequest(cancelKey, 'cancel', controller, Promise.resolve());
         }
 
-        requestManager.registerRequest(key, 'prevent', controller, deferred.promise);
+        if (needsPrevent) {
+          const preventKey = resolveRequestKey(config, prevent.requestKey);
+          (config as any).__pendingKey = preventKey;
+
+          let deferred = pendingReturns.get(preventKey);
+          if (!deferred) {
+            let resolveFn: (value: unknown) => void;
+            let rejectFn: (reason: unknown) => void;
+            const promise = new Promise<unknown>((resolve, reject) => {
+              resolveFn = resolve;
+              rejectFn = reject;
+            });
+            deferred = { resolve: resolveFn!, reject: rejectFn!, promise };
+            pendingReturns.set(preventKey, deferred);
+          }
+
+          requestManager.registerRequest(preventKey, 'prevent', controller, deferred.promise);
+        }
       }
 
       return config;
     },
     (error) => {
-      const config = error?.config || error?.request?.config;
-      if (config) {
-        const key = (config as any).__pendingKey;
-        if (key) {
-          const deferred = pendingReturns.get(key);
-          if (deferred) {
-            deferred.reject(error);
-            pendingReturns.delete(key);
-          }
-          requestManager.unregisterRequest(key, 'prevent');
-        }
-      }
+      if (error?.config) rejectAndCleanup(error.config, requestManager, pendingReturns, error);
       return Promise.reject(error);
     }
   );
@@ -623,7 +657,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       const config = response.config;
 
       // ─────────────────────────────────────────────────────────────────────
-      // 检查业务码是否需要重试（2xx 响应但业务逻辑失败）
+      // 检查业务码重试（2xx 但业务逻辑失败）
       // ─────────────────────────────────────────────────────────────────────
       const retryConfig = normalizeRetryConfig(config.retry, defaultRetry);
       if (retryConfig.enabled && shouldApply(config.method, retryConfig.methods)) {
@@ -632,114 +666,57 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
         syntheticError.response = response;
         syntheticError.isAxiosError = true;
         (syntheticError as any).__bizRetry = true;
+        (syntheticError as any).__retryChecked = true;
 
         if (retryConfig.retryCondition(syntheticError)) {
-          // 清理 requestManager，保留 deferred 供重试链复用
-          const key = (config as any).__pendingKey;
-          if (key) {
-            requestManager.unregisterRequest(key, 'prevent');
-          }
+          cleanupRegistered(config, requestManager);
           throw syntheticError;
         }
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 正常成功：resolve deferred，清理资源
-      // ─────────────────────────────────────────────────────────────────────
-      const key = (config as any).__pendingKey;
-
-      if (key) {
-        const deferred = pendingReturns.get(key);
-        if (deferred) {
-          deferred.resolve(response);
-          pendingReturns.delete(key);
-        }
-        requestManager.unregisterRequest(key, 'prevent');
-      }
-
+      resolveAndCleanup(config, requestManager, pendingReturns, response);
       return response;
     },
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 错误响应处理 (非 2xx / 网络错误 / 请求取消 / 防重复拦截)
+    // 错误响应处理 (非 2xx / 网络错误 / 取消 / 防重复拦截)
     // ─────────────────────────────────────────────────────────────────────────
     async (error) => {
       const config = error.config || (error as any).config;
+      if (!config) return Promise.reject(error);
 
-      // 没有 config 说明是致命错误（如网络完全断开），直接抛出
-      if (!config) {
-        return Promise.reject(error);
-      }
-
-      // ─────────────────────────────────────────────────────────────────────
-      // 情况 1：防重复拦截返回
-      // ─────────────────────────────────────────────────────────────────────
-      // 当前请求被阻止，返回原请求的 deferred.promise
-      // 注意：不清理 pending，原始请求还在进行
+      // 情况 1：防重复拦截 → 返回原始 deferred.promise
       if ((error as any)?.__preventReturn && (error as any)?.__pendingPromise) {
         return (error as any).__pendingPromise;
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 情况 2：请求被取消（AbortController 取消 / cancelToken 取消）
-      // ─────────────────────────────────────────────────────────────────────
-      // 可能是 cancelRequest 取消的旧请求，也可能是其他原因
-      // 取消操作不需要重试
+      // 情况 2：请求被取消 → reject + 清理（不重试）
       if (axios.isCancel(error)) {
-        const key = (config as any).__pendingKey;
-        if (key) {
-          const deferred = pendingReturns.get(key);
-          if (deferred) {
-            deferred.reject(error);
-            pendingReturns.delete(key);
-          }
-          requestManager.unregisterRequest(key, 'prevent');
-        }
+        rejectAndCleanup(config, requestManager, pendingReturns, error);
         return Promise.reject(error);
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 情况 3：处理重试
-      // ─────────────────────────────────────────────────────────────────────
+      // 情况 3：重试
       const retryConfig = normalizeRetryConfig(config.retry, defaultRetry);
-
       if (retryConfig.enabled && shouldApply(config.method, retryConfig.methods)) {
         const retryCount = (config as any).__retryCount || 0;
 
         const shouldRetry =
-          retryConfig.retryCondition(error) &&
-          retryCount < retryConfig.retries &&
+          (retryCount < retryConfig.retries) &&
+          // retryCondition 可能已被 success handler 调用过，避免重复
+          ((error as any).__retryChecked || retryConfig.retryCondition(error)) &&
           ((error as any).__bizRetry || !error.response || !retryConfig.statusCodes.length || retryConfig.statusCodes.includes(error.response.status));
 
         if (shouldRetry) {
-          const delay = calculateRetryDelay(retryConfig, retryCount);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-
-          // 清理 requestManager 中的旧记录（避免与即将注册的新记录冲突）
-          // 但保留 pendingReturns 中的 deferred，让重试链复用同一个 deferred
-          const key = (config as any).__pendingKey;
-          if (key) {
-            requestManager.unregisterRequest(key, 'prevent');
-          }
-
+          await new Promise((resolve) => setTimeout(resolve, calculateRetryDelay(retryConfig, retryCount)));
+          cleanupRegistered(config, requestManager);  // 清理注册，保留 deferred 供重试链复用
           (config as any).__retryCount = retryCount + 1;
           return instance.request(config);
         }
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 情况 4：不需要重试或重试耗尽，清理并抛出错误
-      // ─────────────────────────────────────────────────────────────────────
-      const key = (config as any).__pendingKey;
-      if (key) {
-        const deferred = pendingReturns.get(key);
-        if (deferred) {
-          deferred.reject(error);
-          pendingReturns.delete(key);
-        }
-        requestManager.unregisterRequest(key, 'prevent');
-      }
-
+      // 情况 4：重试耗尽 / 不满足条件 → reject + 清理
+      rejectAndCleanup(config, requestManager, pendingReturns, error);
       return Promise.reject(error);
     }
   );
@@ -750,7 +727,6 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
   const methods: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
   for (const method of methods) {
-    const originalMethod = instance[method.toLowerCase() as keyof AxiosInstance] as any;
     (instance as any)[method.toLowerCase()] = (url: string, data?: any, config?: AxiosRequestConfig) => {
       const finalConfig: AxiosRequestConfig = {
         ...config,
@@ -759,14 +735,10 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       };
 
       // 根据方法类型决定 data 参数的位置
-      if (['GET', 'HEAD', 'OPTIONS', 'DELETE'].includes(method)) {
-        if (data) {
-          finalConfig.params = data;
-        }
+      if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+        if (data) finalConfig.params = data;
       } else {
-        if (data !== undefined) {
-          finalConfig.data = data;
-        }
+        if (data !== undefined) finalConfig.data = data;
       }
 
       return instance.request(finalConfig);
