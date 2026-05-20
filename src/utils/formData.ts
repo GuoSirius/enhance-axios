@@ -10,16 +10,7 @@
  * - null / undefined      → 跳过
  */
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null) return false;
-  if (Array.isArray(value)) return false;
-  if (value instanceof Blob) return false;
-  if (value instanceof Date) return false;
-  if (typeof FormData !== 'undefined' && value instanceof FormData) return false;
-  if (typeof Map !== 'undefined' && value instanceof Map) return false;
-  if (typeof Set !== 'undefined' && value instanceof Set) return false;
-  return true;
-}
+import { isPlainObject } from './common';
 
 function appendValue(fd: FormData, key: string, value: unknown): void {
   if (value == null) return;

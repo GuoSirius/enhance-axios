@@ -1,23 +1,9 @@
 import type { AxiosRequestConfig } from 'axios';
+import { isPlainObject } from './common';
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 辅助函数
 // ════════════════════════════════════════════════════════════════════════════════
-
-/**
- * 检查值是否为"可安全按 key 遍历"的普通对象
- * 排除 Blob / FormData / Date / Map / Set 等内置类型
- */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null) return false;
-  if (Array.isArray(value)) return false;
-  if (value instanceof Blob) return false;
-  if (value instanceof Date) return false;
-  if (typeof FormData !== 'undefined' && value instanceof FormData) return false;
-  if (typeof Map !== 'undefined' && value instanceof Map) return false;
-  if (typeof Set !== 'undefined' && value instanceof Set) return false;
-  return true;
-}
 
 /**
  * 将特殊类型转为普通对象，供模板解析和哈希使用：
