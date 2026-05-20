@@ -28,7 +28,7 @@
  * 1. 请求级配置优先于实例级配置
  * 2. 非 false 快捷方式（string/function/number/array）暗含 enabled: true
  * 3. 空数组 methods: [] 表示不应用于任何方法
- * 4. methods: undefined 表示应用于所有方法
+ * 4. methods: undefined / null 表示应用于所有方法
  *
  * ════════════════════════════════════════════════════════════════════════════════
  *                           请求拦截器 (5 步)
@@ -199,8 +199,8 @@ const DEFAULT_RETRY_CONFIG: InternalRetryConfig = {
 /**
  * 检查 HTTP 方法是否在允许列表中
  */
-function shouldApply(method?: string, methods?: string[]): boolean {
-  if (!methods) return true;
+function shouldApply(method?: string, methods?: string[] | null): boolean {
+  if (methods == null) return true;
   if (methods.length === 0) return false;
   return methods.includes(method?.toUpperCase() || 'GET');
 }
