@@ -5,156 +5,80 @@
  * 1. 防重复提交：检查是否有相同的正在进行的请求
  * 2. 取消请求：取消指定的正在进行的请求
  *
- * ════════════════════════════════════════════════════════════════════════════════
- *                           设计说明
- * ════════════════════════════════════════════════════════════════════════════════
- *
- * 使用 Map 存储 pending 请求，以 requestKey 为键
- * 每次请求完成后，需要调用 unregisterRequest 清理记录
- *
  * 存储结构：
- * - preventPending: 存储防重复提交的 pending 请求
- * - cancelPending: 存储取消请求的 pending 请求
+ * - preventPending: 防重复提交的 pending 请求（key 来自 preventDuplicate.requestKey）
+ * - cancelPending:  取消请求的 pending 请求（key 来自 cancelRequest.requestKey）
  *
- * 注意：两个 Map 是独立的，同一个 key 可以同时存在于两个 Map 中
- * 这是因为防重复和取消请求可能同时启用（虽然推荐只使用其中一个）
+ * 两个 Map 独立，同一个 key 可同时存在于两者（各自 requestKey 可能不同）。
  *
- * ════════════════════════════════════════════════════════════════════════════════
- *                           取消机制说明
- * ════════════════════════════════════════════════════════════════════════════════
- *
- * 使用 AbortController / AbortSignal（axios 1.x 推荐方式）
- * - 创建：new AbortController()
- * - 设置到请求：config.signal = controller.signal
- * - 取消：controller.abort(reason)
- * - 取消错误：axios.isCancel(error) 对两种机制都有效
+ * 取消机制：使用 AbortController / AbortSignal（axios 1.x 推荐）
  */
 
 import type { AxiosRequestConfig } from 'axios';
 import type { PendingRequest } from '../types';
 
-/**
- * 请求管理器类
- *
- * 用于管理所有 pending 状态的请求
- */
 export class RequestManager {
-  // 存储防重复提交的 pending 请求
-  private preventPending: Map<string, PendingRequest> = new Map();
-
-  // 存储取消请求的 pending 请求
-  private cancelPending: Map<string, PendingRequest> = new Map();
-
-  constructor() {
-    // 构造函数为空，配置由外部传入
-  }
+  private preventPending = new Map<string, PendingRequest>();
+  private cancelPending = new Map<string, PendingRequest>();
 
   /**
    * 注册一个新请求
-   *
-   * @param key 请求标识
-   * @param type 请求类型：'prevent' 防重复 或 'cancel' 取消请求
-   * @param controller AbortController
-   * @param promise 请求的 Promise
-   * @param config 请求配置（用于记录元数据）
    */
   registerRequest(
     key: string,
     type: 'prevent' | 'cancel',
     controller: AbortController,
     promise: Promise<unknown>,
-    config?: AxiosRequestConfig
+    config?: AxiosRequestConfig,
   ): void {
     const pending: PendingRequest = {
       key,
-      config: config || {},
+      config: config || ({} as AxiosRequestConfig),
       controller,
       promise,
       timestamp: Date.now(),
     };
-
-    if (type === 'prevent') {
-      this.preventPending.set(key, pending);
-    } else {
-      this.cancelPending.set(key, pending);
-    }
+    (type === 'prevent' ? this.preventPending : this.cancelPending).set(key, pending);
   }
 
   /**
    * 移除请求记录
-   *
-   * @param key 请求标识
-   * @param type 请求类型
    */
   unregisterRequest(key: string, type: 'prevent' | 'cancel'): void {
-    if (type === 'prevent') {
-      this.preventPending.delete(key);
-    } else {
-      this.cancelPending.delete(key);
-    }
+    (type === 'prevent' ? this.preventPending : this.cancelPending).delete(key);
   }
 
   /**
-   * 取消并移除请求
-   *
-   * @param key 请求标识
-   * @returns 是否成功取消
+   * 取消并移除请求，同时检查两个 Map
    */
   cancelRequest(key: string): boolean {
-    // 先检查 preventPending
-    const preventReq = this.preventPending.get(key);
-    if (preventReq) {
-      try {
-        preventReq.controller.abort('Cancelled by cancelRequest');
-      } catch {
-        // 忽略取消错误
-      }
-      this.preventPending.delete(key);
-      return true;
-    }
+    let cancelled = false;
 
-    // 再检查 cancelPending
-    const cancelReq = this.cancelPending.get(key);
-    if (cancelReq) {
-      try {
-        cancelReq.controller.abort('Cancelled by cancelRequest');
-      } catch {
-        // 忽略取消错误
+    const abort = (map: Map<string, PendingRequest>) => {
+      const req = map.get(key);
+      if (req) {
+        try { req.controller.abort('Cancelled by cancelRequest'); } catch { /* noop */ }
+        map.delete(key);
+        cancelled = true;
       }
-      this.cancelPending.delete(key);
-      return true;
-    }
+    };
 
-    return false;
+    abort(this.preventPending);
+    abort(this.cancelPending);
+    return cancelled;
   }
 
   /**
-   * 获取请求状态
-   *
-   * @param key 请求标识
-   * @returns PendingRequest 或 undefined
+   * 获取请求状态（优先返回 preventPending）
    */
   getRequestStatus(key: string): PendingRequest | undefined {
-    // 先检查 preventPending
-    const preventReq = this.preventPending.get(key);
-    if (preventReq) {
-      return preventReq;
-    }
-
-    // 再检查 cancelPending
-    return this.cancelPending.get(key);
+    return this.preventPending.get(key) ?? this.cancelPending.get(key);
   }
 
-  /**
-   * 获取 preventPending 中的请求
-   */
   getPreventPending(key: string): PendingRequest | undefined {
     return this.preventPending.get(key);
   }
 
-  /**
-   * 获取 cancelPending 中的请求
-   */
   getCancelPending(key: string): PendingRequest | undefined {
     return this.cancelPending.get(key);
   }
@@ -163,29 +87,19 @@ export class RequestManager {
    * 清空所有 pending 请求
    */
   clearAll(): void {
-    // 取消并清空 preventPending
-    for (const req of this.preventPending.values()) {
-      try {
-        req.controller.abort('Cleared by clearAll');
-      } catch {
-        // 忽略取消错误
+    const abortAll = (map: Map<string, PendingRequest>, reason: string) => {
+      for (const req of map.values()) {
+        try { req.controller.abort(reason); } catch { /* noop */ }
       }
-    }
-    this.preventPending.clear();
+      map.clear();
+    };
 
-    // 取消并清空 cancelPending
-    for (const req of this.cancelPending.values()) {
-      try {
-        req.controller.abort('Cleared by clearAll');
-      } catch {
-        // 忽略取消错误
-      }
-    }
-    this.cancelPending.clear();
+    abortAll(this.preventPending, 'Cleared by clearAll');
+    abortAll(this.cancelPending, 'Cleared by clearAll');
   }
 
   /**
-   * 获取当前 pending 请求数量
+   * 获取 pending 数量（注意两 Map 独立，合计可能重复计数）
    */
   getPendingCount(): { prevent: number; cancel: number; total: number } {
     return {
