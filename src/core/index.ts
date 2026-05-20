@@ -2,104 +2,114 @@
  * enhance-axios 核心模块
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           功能设计说明
+ *                           功能说明
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * 本库提供三个核心增强功能：
- * 1. 防重复提交 (preventDuplicate)：阻止短时间内重复发送相同请求，返回已有请求的 Promise
- * 2. 取消请求 (cancelRequest)：取消正在进行的相同请求，只保留最新发出的请求
- * 3. 失败重试 (retry)：请求失败时自动重试
+ * 三个核心增强：
+ * 1. 防重复提交 (preventDuplicate)：阻止短时间内重复发送相同请求，返回已有请求的结果
+ * 2. 取消请求 (cancelRequest)：    取消正在进行的相同请求，保留最新请求
+ * 3. 失败重试 (retry)：             请求失败（含 2xx 业务码异常）时自动重试
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           配置策略说明
+ *                           默认策略
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * 【默认策略】
- * - 防重复：默认 methods 为 POST/PUT/PATCH/DELETE（使用 data 的请求）
- * - 取消请求：默认 methods 为 GET（使用 params 的请求）
- * - 两者默认互不重叠，各自独立控制生效方法
+ * - 防重复：methods 默认 ['POST', 'PUT', 'PATCH', 'DELETE']
+ * - 取消请求：methods 默认 ['GET']
+ * - 重试：    methods 默认 undefined（所有方法）
  *
- * 【为什么默认分开】
- * - 防重复：返回已有请求的 Promise，阻止当前请求继续执行
- * - 取消请求：取消已有请求，继续执行当前请求
- * 两者作用相反，默认分到不同方法避免冲突
+ * 三者通过 methods 数组各自控制生效范围，默认互不重叠。
+ * 如同时启用防重复和取消请求：防重复优先（先检查取消 → 再检查防重复 → 注册）。
  *
- * 【优先级规则】
+ * ════════════════════════════════════════════════════════════════════════════════
+ *                           配置规则
+ * ════════════════════════════════════════════════════════════════════════════════
+ *
  * 1. 请求级配置优先于实例级配置
- * 2. 通过 methods 数组 + shouldApply 判断当前请求是否生效
- * 3. config.signal 被内部设置——通过 AbortController 控制请求取消
+ * 2. 非 false 快捷方式（string/function/number/array）暗含 enabled: true
+ * 3. 空数组 methods: [] 表示不应用于任何方法
+ * 4. methods: undefined 表示应用于所有方法
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           请求生命周期
+ *                           请求拦截器 (5 步)
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * ┌─────────────────────────────────────────────────────────────────────────────┐
- * │                         请求发起前 (请求拦截器)                              │
- * └─────────────────────────────────────────────────────────────────────────────┘
- *
- *  步骤 1：取消请求 (cancelRequest)
- *  ────────────────────────────────
- *  • 检查是否有相同 key 的旧请求
- *  • 有则取消旧请求
- *  • 继续发起当前请求
- *  • 适用场景：搜索框输入时自动取消旧请求
- *
- *  步骤 2：防重复提交 (preventDuplicate)
- *  ────────────────────────────────────
- *  • 检查是否有相同 key 且在 intervalMs 内的请求
- *  • 有则返回已有请求的 Promise，阻止当前请求
- *  • 无则继续发起请求
- *  • 适用场景：防止用户快速点击重复提交表单
- *
- * ┌─────────────────────────────────────────────────────────────────────────────┐
- * │                         响应返回后 (响应拦截器)                              │
- * └─────────────────────────────────────────────────────────────────────────────┘
- *
- *  成功响应 (2xx)
- *  ──────────────
- *  • resolve deferred Promise（让防重复等待者拿到响应）
- *  • 清理 pendingReturns 和 requestManager 记录
- *  • 返回响应数据
- *
- *  错误响应 (非 2xx / 网络错误 / 取消)
- *  ──────────────────────────────────
- *  • 情况 1（防重复拦截）：返回原请求的 deferred.promise
- *  • 情况 2（请求被取消）：reject deferred，清理资源，抛出错误
- *  • 情况 3（满足重试条件）：
- *    - 延迟后重试
- *    - 只清理 requestManager（保留 deferred 供重试链复用）
- *    - 增加 retryCount 后重新发起请求
- *  • 情况 4（不满足重试/重试耗尽）：reject deferred，清理资源，抛出错误
+ * 步骤 1：获取有效配置（请求级 > 实例级）
+ * 步骤 2：Content-Type 处理（默认 json，file 不设置）
+ * 步骤 3：取消旧请求（同 cancelKey 的请求被中止）
+ * 步骤 4：防重复检查（同 preventKey 且在 intervalMs 内则阻止并返回 deferred.promise）
+ * 步骤 5：注册新请求（创建 AbortController，注册到 requestManager）
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           失败场景分析
+ *                           响应拦截器
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * | 场景                    | HTTP状态码  | 是否重试 | 如何判断                   |
- * |-------------------------|-------------|----------|----------------------------|
- * | 网络错误                | 无          | 是       | !error.response            |
- * | 429 Too Many Requests   | 429         | 是       | statusCodes 包含           |
- * | 5xx 服务器错误          | 500-599     | 是       | statusCodes 包含            |
- * | 4xx 客户端错误          | 400-499     | 否       | 默认不重试                  |
- * | 请求取消                | -           | 否       | error.code === 'ECONNABORTED' |
- * | 防重复拦截              | -           | 否       | __preventReturn             |
- * | HTTP 2xx 但业务码异常   | 200         | 自定义   | retryCondition              |
+ * 成功 (2xx):
+ *   1. 检测业务码重试 (__bizRetry flag)
+ *   2. resolve deferred → 清理 pendingReturns + requestManager
+ *
+ * 错误 (非 2xx / 网络错误 / 取消):
+ *   情况 1 — 防重复拦截：返回原请求的 deferred.promise（不清理）
+ *   情况 2 — 请求被取消：  reject deferred，清理，抛出
+ *   情况 3 — 满足重试条件：保留 deferred，清理 requestManager，延迟后重新发起
+ *   情况 4 — 不满足/耗尽：  reject deferred，清理，抛出
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           清理时机说明
+ *                           pendingReturns vs requestManager
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * | 操作                   | pendingReturns | requestManager | deferred       | 说明                              |
- * |------------------------|----------------|----------------|----------------|-----------------------------------|
- * | 成功响应               | ✓ 删除         | ✓ 取消注册     | ✓ resolve     | 请求完成，通知等待者               |
- * | 重试前                 | ✗ 保留         | ✓ 取消注册     | ✗ 保留        | 保留 deferred 供重试链复用         |
- * | 重试成功               | ✓ 删除         | ✓ 取消注册     | ✓ resolve     | 最终成功，通知等待者               |
- * | 重试耗尽               | ✓ 删除         | ✓ 取消注册     | ✓ reject      | 最终失败，通知等待者               |
- * | 防重复拦截             | ✗              | ✗              | ✗             | 复用已有请求的 deferred            |
- * | 请求被取消             | ✓ 删除         | ✓ 取消注册     | ✓ reject      | 请求被取消，终止等待               |
- * | cancelRequest 主动取消  | (case 2 处理)  | ✓ 取消         | ✓ reject      | 错误处理器 case 2 负责清理         |
- * | clearAll()             | ✓ 全部删除     | ✓ 全部清空     | ✓ reject 全部 | 批量终止所有等待                   |
- * | 请求拦截器异常          | ✓ 删除         | ✓ 取消注册     | ✓ reject      | 请求未能发出                        |
+ * pendingReturns:   Map<string, PendingDeferred>
+ *   ─ 存储 deferred（promise + resolve/reject），供防重复等待者复用结果
+ *   ─ 请求 A 创建 deferred → 请求 B 被阻止时拿到 A 的 deferred.promise
+ *   ─ 重试链复用同一个 deferred，保证等待者拿到最终结果而非中间失败
+ *
+ * requestManager:   RequestManager 实例
+ *   ─ 内部两个 Map：
+ *     preventPending: Map<string, PendingRequest>  — 防重复注册
+ *     cancelPending:  Map<string, PendingRequest>  — 取消注册
+ *   ─ 每个 PendingRequest 存 { key, config, controller, promise, timestamp }
+ *   ─ controller 用于 abort()，promise 指向 pendingReturns 中的 deferred.promise
+ *
+ * ════════════════════════════════════════════════════════════════════════════════
+ *                           enhance API（外部使用）
+ * ════════════════════════════════════════════════════════════════════════════════
+ *
+ * api.enhance.cancelRequest(key)
+ *   ─ 取消 key 对应的请求（同时查两个 Map）
+ *   ─ 内部调用 requestManager.cancelRequest(key) → controller.abort()
+ *
+ * api.enhance.getRequestStatus(key)
+ *   ─ 返回 PendingRequest | undefined
+ *   ─ 优先查 preventPending，其次 cancelPending
+ *
+ * api.enhance.clearAll()
+ *   ─ reject 所有 deferred → 清空 pendingReturns → 清空 requestManager
+ *
+ * ════════════════════════════════════════════════════════════════════════════════
+ *                           重试场景分析
+ * ════════════════════════════════════════════════════════════════════════════════
+ *
+ * | 场景                    | HTTP  | 重试 | 判断方式                        |
+ * |-------------------------|-------|------|---------------------------------|
+ * | 网络错误                | 无    | 是   | !error.response                 |
+ * | 429 / 5xx               | >=500 | 是   | statusCodes 包含 / retryCondition |
+ * | 4xx 客户端错误          | 400+  | 否   | 默认不重试                      |
+ * | 请求取消                | -     | 否   | axios.isCancel()                |
+ * | 防重复拦截              | -     | 否   | __preventReturn                 |
+ * | 2xx 业务码异常          | 200   | 自定义| __bizRetry + retryCondition      |
+ *
+ * ════════════════════════════════════════════════════════════════════════════════
+ *                           清理时机
+ * ════════════════════════════════════════════════════════════════════════════════
+ *
+ * | 操作           | pendingReturns | requestManager | deferred     |
+ * |----------------|----------------|----------------|--------------|
+ * | 成功 / 重试成功 | 删除           | 取消注册       | resolve      |
+ * | 失败 / 重试耗尽 | 删除           | 取消注册       | reject       |
+ * | 重试前          | 保留           | 取消注册       | 保留         |
+ * | 防重复拦截      | -              | -              | -            |
+ * | 请求被取消      | 删除           | 取消注册       | reject       |
+ * | clearAll()     | 全部删除       | 全部清空       | reject 全部  |
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
@@ -537,24 +547,24 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       // ─────────────────────────────────────────────────────────────────────
       // 步骤 2：处理 Content-Type
       // ─────────────────────────────────────────────────────────────────────
-      // 仅在未显式设置 Content-Type 时处理
+      // 仅在未显式设置 Content-Type 时处理（大小写不敏感）
       // 'json' → application/json;charset=UTF-8（默认）
       // 'form' → application/x-www-form-urlencoded
-      // 'file' → 不设置（multipart/form-data 需要 boundary，交由浏览器自动处理）
+      // 'file' → 不设置（multipart/form-data 需要 boundary）
       // 自定义字符串 → 直接使用
-      if (!config.headers?.['Content-Type'] && !config.headers?.['content-type']) {
+      const headers = config.headers || {};
+      const hasContentType = typeof headers === 'object'
+        && Object.keys(headers).some(k => k.toLowerCase() === 'content-type');
+
+      if (!hasContentType) {
         const contentType = config.contentType;
 
-        // 'file' 模式下不设置 Content-Type（浏览器自动带 boundary）
-        if (contentType === 'file') {
-          // skip
-        } else if (contentType != null) {
+        if (contentType !== 'file') {
           config.headers = config.headers || {};
-          config.headers['Content-Type'] = CONTENT_TYPE_MAP[contentType] || contentType;
-        } else {
-          // null / undefined → 默认 json
-          config.headers = config.headers || {};
-          config.headers['Content-Type'] = CONTENT_TYPE_MAP.json;
+          const value = contentType != null
+            ? (CONTENT_TYPE_MAP[contentType] || contentType)
+            : CONTENT_TYPE_MAP.json;
+          config.headers['Content-Type'] = value;
         }
       }
 
