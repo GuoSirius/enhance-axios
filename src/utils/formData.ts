@@ -4,8 +4,8 @@
  * 转换规则：
  * - File / Blob           → 字段名 'file'（可通过 fieldName 自定义）
  * - FileList              → 遍历，每个文件字段名 'file'
- * - 数组                  → 遍历每一项，File/Blob 用 fieldName，其他值转字符串
- * - 普通对象              → 遍历 entries，key 作为字段名；嵌套对象用 . 连接
+ * - 数组                  → 遍历每一项，所有值共用同一字段名
+ * - 普通对象              → 遍历 entries，每个 key 作为字段名；嵌套对象用 . 连接
  * - string/number/boolean → 转字符串，字段名 'file'
  * - null / undefined      → 跳过
  */
@@ -27,7 +27,7 @@ function appendValue(fd: FormData, key: string, value: unknown): void {
   if (value instanceof File) {
     fd.append(key, value);
   } else if (value instanceof Blob) {
-    fd.append(key, value);  // non-File Blob (File already matched above)
+    fd.append(key, value);
   } else if (value instanceof Date) {
     fd.append(key, value.toISOString());
   } else if (Array.isArray(value)) {
@@ -45,32 +45,16 @@ function appendValue(fd: FormData, key: string, value: unknown): void {
 
 export function getFormData(data: unknown, fieldName?: string): FormData {
   const fd = new FormData();
-
   if (data == null) return fd;
 
-  // 单个 FileLike
-  if (data instanceof Blob) {
-    fd.append(fieldName || 'file', data, data instanceof File ? data.name : undefined);
-    return fd;
-  }
-
-  // FileList
+  // FileList — 不能使用 for-of 迭代，单独处理
   if (typeof FileList !== 'undefined' && data instanceof FileList) {
-    for (let i = 0; i < data.length; i++) {
-      fd.append(fieldName || 'file', data[i]);
-    }
+    const key = fieldName || 'file';
+    for (let i = 0; i < data.length; i++) fd.append(key, data[i]);
     return fd;
   }
 
-  // 数组
-  if (Array.isArray(data)) {
-    for (const item of data) {
-      appendValue(fd, fieldName || 'file', item);
-    }
-    return fd;
-  }
-
-  // 普通对象
+  // 顶层普通对象 — 使用对象自身的 key
   if (isPlainObject(data)) {
     for (const [key, value] of Object.entries(data)) {
       appendValue(fd, key, value);
@@ -78,7 +62,7 @@ export function getFormData(data: unknown, fieldName?: string): FormData {
     return fd;
   }
 
-  // 基础值
-  fd.append(fieldName || 'file', String(data));
+  // 其余所有类型统一走 appendValue
+  appendValue(fd, fieldName || 'file', data);
   return fd;
 }
