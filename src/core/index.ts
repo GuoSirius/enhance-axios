@@ -573,6 +573,12 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       // ─────────────────────────────────────────────────────────────────────
       if (cancel.enabled && shouldApply(method, cancel.methods)) {
         const key = resolveRequestKey(config, cancel.requestKey);
+        // 清除旧请求的 key 标记，避免其异步 error handler 误删新请求的注册
+        const existing = requestManager.getRequestStatus(key);
+        if (existing?.config) {
+          (existing.config as any).__cancelKey = undefined;
+          (existing.config as any).__pendingKey = undefined;
+        }
         requestManager.cancelRequest(key);
       }
 
@@ -625,7 +631,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
         if (needsCancel) {
           const cancelKey = resolveRequestKey(config, cancel.requestKey);
           (config as any).__cancelKey = cancelKey;
-          requestManager.registerRequest(cancelKey, 'cancel', controller, Promise.resolve());
+          requestManager.registerRequest(cancelKey, 'cancel', controller, Promise.resolve(), config);
         }
 
         if (needsPrevent) {
@@ -644,7 +650,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
             pendingReturns.set(preventKey, deferred);
           }
 
-          requestManager.registerRequest(preventKey, 'prevent', controller, deferred.promise);
+          requestManager.registerRequest(preventKey, 'prevent', controller, deferred.promise, config);
         }
       }
 
