@@ -11,8 +11,14 @@
  */
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    && !(value instanceof Blob) && !(value instanceof Date);
+  if (typeof value !== 'object' || value === null) return false;
+  if (Array.isArray(value)) return false;
+  if (value instanceof Blob) return false;
+  if (value instanceof Date) return false;
+  if (typeof FormData !== 'undefined' && value instanceof FormData) return false;
+  if (typeof Map !== 'undefined' && value instanceof Map) return false;
+  if (typeof Set !== 'undefined' && value instanceof Set) return false;
+  return true;
 }
 
 function appendValue(fd: FormData, key: string, value: unknown): void {
@@ -21,7 +27,7 @@ function appendValue(fd: FormData, key: string, value: unknown): void {
   if (value instanceof File) {
     fd.append(key, value);
   } else if (value instanceof Blob) {
-    fd.append(key, value, value instanceof File ? value.name : undefined);
+    fd.append(key, value);  // non-File Blob (File already matched above)
   } else if (value instanceof Date) {
     fd.append(key, value.toISOString());
   } else if (Array.isArray(value)) {
