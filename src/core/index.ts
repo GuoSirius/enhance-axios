@@ -257,22 +257,22 @@ function normalizePreventConfig(
 
   // string -> requestKey
   if (typeof config === 'string') {
-    return { ...defaults, requestKey: config };
+    return { ...defaults, enabled: true, requestKey: config };
   }
 
   // function -> requestKey
   if (typeof config === 'function') {
-    return { ...defaults, requestKey: config as (config: AxiosRequestConfig) => string };
+    return { ...defaults, enabled: true, requestKey: config as (config: AxiosRequestConfig) => string };
   }
 
   // number -> intervalMs
   if (typeof config === 'number') {
-    return { ...defaults, intervalMs: config };
+    return { ...defaults, enabled: true, intervalMs: config };
   }
 
   // array -> methods
   if (Array.isArray(config)) {
-    return { ...defaults, methods: config as string[] };
+    return { ...defaults, enabled: true, methods: config as string[] };
   }
 
   // object -> 合并
@@ -304,15 +304,15 @@ function normalizeCancelConfig(
   }
 
   if (typeof config === 'string') {
-    return { ...defaults, requestKey: config };
+    return { ...defaults, enabled: true, requestKey: config };
   }
 
   if (typeof config === 'function') {
-    return { ...defaults, requestKey: config as (config: AxiosRequestConfig) => string };
+    return { ...defaults, enabled: true, requestKey: config as (config: AxiosRequestConfig) => string };
   }
 
   if (Array.isArray(config)) {
-    return { ...defaults, methods: config as string[] };
+    return { ...defaults, enabled: true, methods: config as string[] };
   }
 
   return {
@@ -351,7 +351,15 @@ function normalizeRetryConfig(
   }
 
   if (typeof config === 'number') {
-    return { ...defaults, retries: config };
+    return { ...defaults, enabled: true, retries: config };
+  }
+
+  if (typeof config === 'function') {
+    return { ...defaults, enabled: true, retryCondition: config as (error: AxiosError) => boolean };
+  }
+
+  if (Array.isArray(config)) {
+    return { ...defaults, enabled: true, statusCodes: config as number[] };
   }
 
   if (typeof config === 'function') {
