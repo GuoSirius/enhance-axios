@@ -124,6 +124,23 @@ const responses = {
     });
   },
 
+  // 回显接口 — 用于验证缓存破坏、数据转换等
+  echo: (req, res) => {
+    const parsed = new URL(req.url, 'http://localhost');
+    sendJson(res, 200, {
+      code: 0,
+      message: 'success',
+      data: {
+        method: req.method,
+        query: Object.fromEntries(parsed.searchParams),
+        body: req.body || null,
+        headers: {
+          'content-type': req.headers['content-type'] || 'not set',
+        },
+      }
+    });
+  },
+
   // 网络错误模拟 - 直接关闭连接
   'network-error': (req, res) => {
     res.destroy();  // 直接断开，模拟网络错误

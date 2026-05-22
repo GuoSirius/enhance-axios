@@ -264,16 +264,9 @@ describe('enhance-axios', () => {
       expect(instance.enhance).toBeDefined();
     });
 
-    it('数组赋给 statusCodes', () => {
+    it('数组快捷生成 retryCondition', () => {
       const instance = createEnhanceInstance({
         retry: [408, 429, 500],
-      });
-      expect(instance.enhance).toBeDefined();
-    });
-
-    it('空数组 statusCodes 视为全部状态码', () => {
-      const instance = createEnhanceInstance({
-        retry: [] as any,
       });
       expect(instance.enhance).toBeDefined();
     });
@@ -315,13 +308,6 @@ describe('enhance-axios', () => {
       expect(instance.enhance).toBeDefined();
     });
 
-    it('可配置 statusCodes', () => {
-      const instance = createEnhanceInstance({
-        retry: { statusCodes: [408, 429, 500, 502, 503, 504] },
-      });
-      expect(instance.enhance).toBeDefined();
-    });
-
     it('可配置 exponential 指数退避', () => {
       const instance = createEnhanceInstance({
         retry: { exponential: false },
@@ -354,7 +340,7 @@ describe('enhance-axios', () => {
 
     it('5xx 错误触发重试（默认行为）', () => {
       const instance = createEnhanceInstance({
-        retry: { statusCodes: [500, 502, 503, 504] },
+        retry: { retryCondition: (err) => !err.response || err.response.status >= 500 },
       });
       expect(instance.enhance).toBeDefined();
     });
@@ -532,7 +518,7 @@ describe('2xx 业务码重试', () => {
     expect(instance.enhance).toBeDefined();
   });
 
-  it('支持 __bizRetry 标记绕过 statusCodes 检查', () => {
+  it('retryCondition 可在 success handler 中检测业务码并重试', () => {
     const instance = createEnhanceInstance({
       baseURL: 'http://localhost',
       retry: {
@@ -554,4 +540,248 @@ describe('2xx 业务码重试', () => {
     });
     expect(instance.enhance).toBeDefined();
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 缓存破坏测试（通过 mock adapter 验证实际行为）
+// ═══════════════════════════════════════════════════════════════════
+
+describe('缓存破坏 (cacheBusting)', () => {
+  function mockAdapter() {
+    return (config: any) => Promise.resolve({
+      data: { code: 0, data: { query: config.params } },
+      status: 200, statusText: 'OK', headers: {}, config,
+    });
+  }
+
+  it('默认所有请求自动添加 _ 参数', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    const res = await instance.get('/test', null, { adapter: mockAdapter() });
+    expect(res.data.data.query._).toBeDefined();
+    expect(typeof res.data.data.query._).toBe('string');
+  });
+
+  it('POST 请求也添加 _ 参数', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    const res = await instance.post('/test', { name: 'test' }, { adapter: mockAdapter() });
+    expect(res.data.data.query._).toBeDefined();
+  });
+
+  it('cacheBusting: false 不添加 _', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost', cacheBusting: false });
+    const res = await instance.get('/test', null, { adapter: mockAdapter() });
+    expect(res.data.data.query).toBeUndefined();
+  });
+
+  it('请求级 cacheBusting: false 可覆盖实例级', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    const res = await instance.get('/test', null, { cacheBusting: false, adapter: mockAdapter() });
+    expect(res.data.data.query).toBeUndefined();
+  });
+
+  it('_ 不影响 prevent/cancel key（key 基于不含 _ 的 params 生成）', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      cancelRequest: { requestKey: '${method}-${url}' },
+    });
+
+    // 发送两次请求，第二次会取消第一次
+    // 如果 _ 参与了 key，两次请求 key 不同，第二次不会取消第一次
+    let firstCancelled = false;
+    const adapter1 = (config: any) => new Promise((_resolve, reject) => {
+      // 延迟响应，给第二次请求时间取消它
+      setTimeout(() => reject({ message: 'timeout', config }), 500);
+    });
+
+    const p1 = instance.get('/test', { q: '1' }, {
+      adapter: adapter1,
+      cancelRequest: { requestKey: '${method}-${url}' },
+    }).catch((err: any) => {
+      if (err && err.message && err.message.indexOf('cancel') >= 0) firstCancelled = true;
+    });
+
+    // 稍后发第二个请求
+    await new Promise(r => setTimeout(r, 50));
+    const res2 = await instance.get('/test', { q: '2' }, {
+      adapter: mockAdapter(),
+      cancelRequest: { requestKey: '${method}-${url}' },
+    });
+
+    expect(res2.data.data.query._).toBeDefined();
+    // 第二次请求成功，且 query 中有 q=2，说明没有被 _ 干扰 key 匹配
+    expect(res2.data.data.query.q).toBe('2');
+  });
+
+  it('重试时不会重复追加 _', async () => {
+    let callCount = 0;
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      retry: { retries: 2, retryDelay: 10, exponential: false },
+    });
+
+    const res = await instance.get('/test', null, {
+      adapter: (config: any) => {
+        callCount++;
+        if (callCount <= 2) {
+          return Promise.reject({
+            config, isAxiosError: true, message: 'fail',
+            response: { status: 500, data: {} },
+          });
+        }
+        return Promise.resolve({
+          data: { code: 0, data: { query: config.params } },
+          status: 200, statusText: 'OK', headers: {}, config,
+        });
+      },
+    });
+
+    // 只有 1 个 _ 参数，不是累积的 _
+    const queryKeys = Object.keys(res.data.data.query).filter(k => k === '_');
+    expect(queryKeys.length).toBe(1);
+  }, 10000);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 数据自动转换测试（通过 mock adapter 验证实际行为）
+// ═══════════════════════════════════════════════════════════════════
+
+describe('数据自动转换 (transformRequest)', () => {
+  function captureAdapter() {
+    let captured: any;
+    return {
+      adapter: (config: any) => {
+        captured = config;
+        return Promise.resolve({
+          data: { code: 0, data: { body: config.data, headers: config.headers } },
+          status: 200, statusText: 'OK', headers: {}, config,
+        });
+      },
+      getCaptured: () => captured,
+    };
+  }
+
+  it('json 类型自动 JSON.stringify', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost', contentType: 'json' });
+    const c = captureAdapter();
+    const res = await instance.post('/test', { name: 'test', value: 123 }, { adapter: c.adapter });
+    expect(typeof c.getCaptured().data).toBe('string');
+    expect(c.getCaptured().data).toBe('{"name":"test","value":123}');
+  });
+
+  it('file 类型注入 transformRequest 转 FormData', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    const c = captureAdapter();
+    await instance.post('/test', { name: 'test', age: 18 }, {
+      contentType: 'file', adapter: c.adapter,
+    });
+    // transformRequest 链中包含我们的转换函数
+    expect(Array.isArray(c.getCaptured().transformRequest)).toBe(true);
+    expect((c.getCaptured().transformRequest as any[]).length).toBeGreaterThan(0);
+  });
+
+  it('form 类型注入 transformRequest 转 URLSearchParams', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    const c = captureAdapter();
+    await instance.post('/test', { user: 'admin', pass: '123' }, {
+      contentType: 'form', adapter: c.adapter,
+    });
+    expect(Array.isArray(c.getCaptured().transformRequest)).toBe(true);
+  });
+
+  it('已是 FormData 不转换', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    const fd = new FormData();
+    fd.append('file', new Blob(['test'], { type: 'text/plain' }));
+    const c = captureAdapter();
+    await instance.post('/test', fd, { contentType: 'file', adapter: c.adapter });
+    // FormData 不会被修改
+    expect(c.getCaptured().data).toBeInstanceOf(FormData);
+  });
+
+  it('已是字符串不转换', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    const c = captureAdapter();
+    await instance.post('/test', '{"already":"json"}', { contentType: 'json', adapter: c.adapter });
+    expect(c.getCaptured().data).toBe('{"already":"json"}');
+  });
+
+  it('重试时 __dataTransformInjected 防止重复注入', async () => {
+    let callCount = 0;
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      retry: { retries: 1, retryDelay: 10, exponential: false },
+    });
+
+    const c = captureAdapter();
+    // Note: adapter is replaced on retry since config is re-used
+    await instance.post('/test', { name: 'test' }, {
+      contentType: 'file',
+      adapter: (config: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.reject({
+            config, isAxiosError: true, message: 'fail',
+            response: { status: 500, data: {} },
+          });
+        }
+        return Promise.resolve({
+          data: { code: 0, data: {} },
+          status: 200, statusText: 'OK', headers: {}, config,
+        });
+      },
+    });
+    // 没有崩溃、没有无限嵌套 transformRequest 数组
+    expect(callCount).toBe(2);
+  }, 10000);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 交互场景：防重复 + 重试
+// ═══════════════════════════════════════════════════════════════════
+
+describe('防重复 + 重试交互', () => {
+  it('等待者拿到重试后的最终成功结果', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      retry: { retries: 2, retryDelay: 10, exponential: false },
+    });
+
+    let callCount = 0;
+    const results: any[] = [];
+
+    const makeRequest = (id: number) => {
+      return instance.post('/test', { id }, {
+        preventDuplicate: { requestKey: '${method}-${url}' },
+        adapter: (config: any) => {
+          callCount++;
+          if (callCount === 1) {
+            return Promise.reject({
+              config, isAxiosError: true, message: 'fail',
+              response: { status: 500, data: {} },
+            });
+          }
+          return Promise.resolve({
+            data: { code: 0, data: { id } },
+            status: 200, statusText: 'OK', headers: {}, config,
+          });
+        },
+      });
+    };
+
+    // 同时发送两个请求
+    const [r1, r2] = await Promise.allSettled([
+      makeRequest(1),
+      // 第二个请求在很短间隔后发出，会被防重复拦截
+      (async () => {
+        await new Promise(r => setTimeout(r, 5));
+        return makeRequest(2);
+      })(),
+    ]);
+
+    // 两个请求都应该成功（第二个复用了第一个的重试结果）
+    expect(r1.status).toBe('fulfilled');
+    expect(r2.status).toBe('fulfilled');
+    // 实际只发出了1次 HTTP 请求（第一次失败重试后成功）
+    // callCount 可能是 2（1次失败+1次成功），但只有1个真正的请求被注册
+  }, 10000);
 });

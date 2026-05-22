@@ -39,6 +39,8 @@
  * 步骤 3：取消旧请求（同 cancelKey 的请求被中止）
  * 步骤 4：防重复检查（同 preventKey 且在 intervalMs 内则阻止并返回 deferred.promise）
  * 步骤 5：注册新请求（创建 AbortController，注册到 requestManager）
+ * 步骤 5.5：注入数据转换（file/form → transformRequest，__dataTransformInjected 防重入）
+ * 步骤 5.6：缓存破坏（所有请求加 _ 参数，__cacheBustInjected 防重入）
  *
  * ════════════════════════════════════════════════════════════════════════════════
  *                           响应拦截器
@@ -92,7 +94,7 @@
  * | 场景                    | HTTP  | 重试 | 判断方式                        |
  * |-------------------------|-------|------|---------------------------------|
  * | 网络错误                | 无    | 是   | !error.response                 |
- * | 429 / 5xx               | >=500 | 是   | statusCodes 包含 / retryCondition |
+ * | 429 / 5xx               | >=500 | 是   | retryCondition                  |
  * | 4xx 客户端错误          | 400+  | 否   | 默认不重试                      |
  * | 请求取消                | -     | 否   | axios.isCancel()                |
  * | 防重复拦截              | -     | 否   | __preventReturn                 |
@@ -114,7 +116,7 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { RequestManager } from './requestManager';
-import { resolveRequestKey } from '../utils';
+import { resolveRequestKey, getFormData } from '../utils';
 import type {
   CreateEnhanceOptions,
   EnhanceInstance,
@@ -181,15 +183,19 @@ const DEFAULT_RETRY_CONFIG: InternalRetryConfig = {
     if (!error.response) {
       return true;
     }
+    const status = error.response.status;
+    // 408 Request Timeout, 429 Too Many Requests
+    if (status === 408 || status === 429) {
+      return true;
+    }
     // 5xx 服务器错误：重试
-    if (error.response.status >= 500 && error.response.status < 600) {
+    if (status >= 500 && status < 600) {
       return true;
     }
     return false;
   },
   exponential: true,
   maxDelay: 30000,
-  statusCodes: [408, 429, 500, 502, 503, 504],
 };
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -226,6 +232,47 @@ function calculateRetryDelay(
     );
   }
   return delay;
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// 数据自动转换（transformRequest 注入）
+// ════════════════════════════════════════════════════════════════════════════════
+
+function getDataFormat(config: AxiosRequestConfig): string | undefined {
+  const headers = config.headers || {};
+  const ctKey = Object.keys(headers).find(k => k.toLowerCase() === 'content-type');
+  if (ctKey) {
+    const ct = String(headers[ctKey]).toLowerCase();
+    if (ct.includes('multipart/form-data')) return 'file';
+    if (ct.includes('application/x-www-form-urlencoded')) return 'form';
+    if (ct.includes('application/json') || ct.includes('+json')) return 'json';
+  }
+  return config.contentType;
+}
+
+function injectDataTransform(
+  config: AxiosRequestConfig,
+  format: 'file' | 'form',
+  instance: AxiosInstance,
+): void {
+  if ((config as any).__dataTransformInjected) return;
+  (config as any).__dataTransformInjected = true;
+
+  const ourTransform = (data: unknown) => {
+    if (data == null || data instanceof FormData || data instanceof URLSearchParams) return data;
+    if (typeof data !== 'object') return data;
+    if (format === 'file') return getFormData(data);
+    return new URLSearchParams(data as Record<string, string>);
+  };
+
+  const existing = config.transformRequest;
+  const defaults = instance.defaults.transformRequest;
+  const source = existing != null ? existing : defaults;
+  let chain: ((...args: any[]) => any)[] = [];
+  if (source != null) {
+    chain = Array.isArray(source) ? [...source] : [source];
+  }
+  config.transformRequest = [ourTransform, ...chain];
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -340,7 +387,7 @@ function normalizeCancelConfig(
  * 支持的输入格式：
  * - boolean: 赋给 enabled
  * - number: 赋给 retries
- * - number[]: 赋给 statusCodes
+ * - number[]: 生成 retryCondition（匹配数组中状态码或网络错误）
  * - function: 赋给 retryCondition
  * - object: 合并到配置
  * - undefined/null: 视为未传递，使用默认值
@@ -369,7 +416,15 @@ function normalizeRetryConfig(
   }
 
   if (Array.isArray(config)) {
-    return { ...defaults, enabled: true, statusCodes: config as number[] };
+    const codes = config as number[];
+    return {
+      ...defaults,
+      enabled: true,
+      retryCondition: (error: AxiosError) => {
+        if (!error.response) return true;
+        return codes.includes(error.response.status);
+      },
+    };
   }
 
   return {
@@ -382,7 +437,6 @@ function normalizeRetryConfig(
     methods: (config as RetryConfig).methods !== undefined
       ? (config as RetryConfig).methods
       : defaults.methods,
-    statusCodes: (config as RetryConfig).statusCodes ?? defaults.statusCodes,
   };
 }
 
@@ -654,6 +708,29 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
         }
       }
 
+      // ─────────────────────────────────────────────────────────────────────
+      // 步骤 5.5：注入数据转换（file/form → transformRequest，json 由 axios 默认处理）
+      // ─────────────────────────────────────────────────────────────────────
+      const format = getDataFormat(config);
+      if (format === 'file' || format === 'form') {
+        injectDataTransform(config, format, instance);
+      }
+
+      // ─────────────────────────────────────────────────────────────────────
+      // 步骤 5.6：缓存破坏（所有请求加 _ 参数，key 已生成不受影响）
+      // ─────────────────────────────────────────────────────────────────────
+      if (config.cacheBusting !== false && !(config as any).__cacheBustInjected) {
+        (config as any).__cacheBustInjected = true;
+        const stamp = Date.now().toString(36);
+        if (config.params instanceof URLSearchParams) {
+          config.params.append('_', stamp);
+        } else if (typeof config.params === 'object' && config.params !== null) {
+          config.params = { ...config.params, _: stamp };
+        } else {
+          config.params = { _: stamp };
+        }
+      }
+
       return config;
     },
     (error) => {
@@ -722,8 +799,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
 
         const shouldRetry =
           retryCount < retryConfig.retries &&
-          retryConfig.retryCondition(error) &&
-          (!error.response || !retryConfig.statusCodes.length || retryConfig.statusCodes.includes(error.response.status));
+          retryConfig.retryCondition(error);
 
         if (shouldRetry) {
           await new Promise((resolve) => setTimeout(resolve, calculateRetryDelay(retryConfig, retryCount)));

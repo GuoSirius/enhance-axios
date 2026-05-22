@@ -25,7 +25,6 @@ export type ContentType = 'json' | 'form' | 'file' | (string & {});
 export const CONTENT_TYPE_MAP: Record<string, string> = {
   json: 'application/json;charset=UTF-8',
   form: 'application/x-www-form-urlencoded',
-  file: 'multipart/form-data',
 };
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -84,14 +83,7 @@ export interface RetryConfig {
   maxDelay?: number;
   /** 生效的 HTTP 方法，默认全部方法 */
   methods?: string[];
-  /** 需要重试的 HTTP 状态码列表 */
-  statusCodes?: number[];
 }
-
-/**
- * 默认需要重试的 HTTP 状态码
- */
-export const DEFAULT_RETRY_STATUS_CODES = [408, 429, 500, 502, 503, 504];
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 内部类型
@@ -176,7 +168,7 @@ export type CancelRequestOption =
  * 支持多种输入格式：
  * - boolean: 启用/禁用
  * - number: 设置 retries
- * - number[]: 设置 statusCodes
+ * - number[]: 生成 retryCondition（匹配数组中状态码或网络错误）
  * - function: 设置 retryCondition
  * - object: 完整配置对象
  */
@@ -184,7 +176,6 @@ export type RetryOption =
   | RetryConfig
   | boolean
   | number
-  | number[]
   | ((error: AxiosError) => boolean);
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -199,7 +190,7 @@ export type InternalCancelConfig = RequiredKeys<CancelRequestConfig, 'enabled'>;
 
 export type InternalRetryConfig = RequiredKeys<
   RetryConfig,
-  'enabled' | 'retries' | 'retryDelay' | 'retryCondition' | 'exponential' | 'maxDelay' | 'statusCodes'
+  'enabled' | 'retries' | 'retryDelay' | 'retryCondition' | 'exponential' | 'maxDelay'
 >;
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -220,6 +211,8 @@ export interface CreateEnhanceOptions extends AxiosRequestConfig {
   cancelRequest?: CancelRequestOption;
   /** 重试配置 */
   retry?: RetryOption;
+  /** 所有请求自动添加 _ 参数防止缓存，默认 true */
+  cacheBusting?: boolean;
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -237,6 +230,8 @@ declare module 'axios' {
     cancelRequest?: CancelRequestOption;
     /** 重试配置 */
     retry?: RetryOption;
+    /** 所有请求自动添加 _ 参数防止缓存，默认 true */
+    cacheBusting?: boolean;
   }
 }
 

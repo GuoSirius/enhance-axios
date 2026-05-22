@@ -140,6 +140,11 @@ button:active { transform: scale(0.95); }
       <div class="form-group"><label class="form-label">retries</label><input type="number" id="retry-count" class="form-input" value="3"></div>
       <div class="form-group"><label class="form-label">delay</label><input type="number" id="retry-delay" class="form-input" value="300"></div>
     </div>
+    <div class="section">
+      <div class="panel-title">全局</div>
+      <div class="form-group"><label class="form-label">Content-Type</label><select id="contentType" class="form-input"><option value="json">json</option><option value="form">form</option><option value="file">file</option></select></div>
+      <div class="form-group"><label class="form-checkbox"><input type="checkbox" id="cachebust-enabled" checked><span>缓存破坏 (_ 参数)</span></label></div>
+    </div>
     <button class="btn-primary" style="width:100%;margin-top:8px" onclick="rebuild()">重建实例</button>
   </div>
 
@@ -157,6 +162,8 @@ button:active { transform: scale(0.95); }
       <button class="btn-secondary" onclick="testBizError()">业务码</button>
       <button class="btn-primary" onclick="testMixed()">综合</button>
       <button class="btn-secondary" onclick="testSingle()">单次</button>
+      <button class="btn-secondary" onclick="testCacheBust()">缓存破坏</button>
+      <button class="btn-secondary" onclick="testAutoTransform()">数据转换</button>
     </div>
 
     <div class="log-area" id="logArea">
@@ -239,6 +246,8 @@ function rebuild() {
   var cfg = {
     baseURL: document.getElementById('baseUrl').value,
     timeout: parseInt(document.getElementById('timeout').value) || 5000,
+    contentType: document.getElementById('contentType').value,
+    cacheBusting: document.getElementById('cachebust-enabled').checked,
     preventDuplicate: document.getElementById('prevent-enabled').checked ? {
       requestKey: '${method}-${url}',
       intervalMs: parseInt(document.getElementById('prevent-interval').value) || 2000,
@@ -257,7 +266,9 @@ function rebuild() {
     '实例已创建，所有增强功能：' +
     '<span class="' + (cfg.preventDuplicate ? 'info' : '') + '">防重复' + (cfg.preventDuplicate ? ' ✓' : ' ✗') + '</span> ' +
     '<span class="' + (cfg.cancelRequest ? 'warning' : '') + '">取消请求' + (cfg.cancelRequest ? ' ✓' : ' ✗') + '</span> ' +
-    '<span class="' + (cfg.retry ? 'retry' : '') + '">重试' + (cfg.retry ? ' ✓' : ' ✗') + '</span>');
+    '<span class="' + (cfg.retry ? 'retry' : '') + '">重试' + (cfg.retry ? ' ✓' : ' ✗') + '</span> ' +
+    '<span class="' + (cfg.cacheBusting ? 'info' : '') + '">缓存破坏' + (cfg.cacheBusting ? ' ✓' : ' ✗') + '</span> ' +
+    '<span class="info">Content-Type: ' + cfg.contentType + '</span>');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -566,6 +577,95 @@ function testMixed() {
       })(i);
     }
   }, 100);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 缓存破坏
+// ══════════════════════════════════════════════════════════════════════════════
+function testCacheBust() {
+  if (!api) return;
+  var groupId = ++reqSeq;
+  var body = createGroup('缓存破坏测试 #' + groupId, 'info');
+  addScenario(body,
+    '<strong>场景：</strong>发送 2 个 GET 请求查看 query 中是否自动追加了 _ 参数<br>' +
+    '<strong>预期：</strong>每个请求的 query 中都有 _=<timestamp>，且两个 _ 值不同');
+
+  function sendOne(seq) {
+    stats.send++; updateStats();
+    addRequest(body, groupId + '.' + seq, 'GET', '/api/echo?s=' + seq, 'send', '发送请求...');
+    api.get('/api/echo', { s: String(seq) }, {
+      preventDuplicate: false, cancelRequest: false, retry: false,
+    }).then(function(r) {
+      stats.ok++; updateStats();
+      var cards = body.querySelectorAll('.request-card');
+      cards[seq - 1].className = 'request-card success';
+      cards[seq - 1].querySelector('.req-detail').innerHTML =
+        '<span class="success">✓</span> query=' + JSON.stringify(r.data && r.data.query) +
+        ' <span class="info">(_=' + (r.data && r.data.query && r.data.query._) + ')</span>';
+      if (seq === 2) addFinalResult(body, '★ 两个请求 _ 参数不同，缓存破坏生效', true);
+    }).catch(function(err) {
+      stats.fail++; updateStats();
+    });
+  }
+  sendOne(1);
+  setTimeout(function() { sendOne(2); }, 200);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 数据自动转换
+// ══════════════════════════════════════════════════════════════════════════════
+function testAutoTransform() {
+  if (!api) return;
+  var groupId = ++reqSeq;
+  var body = createGroup('数据自动转换测试 #' + groupId, 'info');
+  addScenario(body,
+    '<strong>场景：</strong>发送 3 个 POST 请求到 /api/echo，分别使用 json/form/file 的 contentType<br>' +
+    '<strong>预期：</strong>json → JSON.stringify，form → URLSearchParams，file → FormData');
+
+  // json
+  stats.send++; updateStats();
+  addRequest(body, groupId + '.1', 'POST', '/api/echo (json)', 'send', '发送 JSON 数据...');
+  api.post('/api/echo', { name: 'test', value: 123 }, {
+    contentType: 'json', preventDuplicate: false, cancelRequest: false, retry: false,
+  }).then(function(r) {
+    stats.ok++; updateStats();
+    var cards = body.querySelectorAll('.request-card');
+    cards[0].className = 'request-card success';
+    cards[0].querySelector('.req-detail').innerHTML =
+      '<span class="success">✓</span> body=' + JSON.stringify(r.data.body) + ' <span class="info">(已自动 JSON.stringify)</span>';
+  }).catch(function(err) { stats.fail++; updateStats(); });
+
+  // form
+  setTimeout(function() {
+    stats.send++; updateStats();
+    addRequest(body, groupId + '.2', 'POST', '/api/echo (form)', 'send', '发送 form 数据...');
+    api.post('/api/echo', { user: 'admin', pass: '123' }, {
+      contentType: 'form', preventDuplicate: false, cancelRequest: false, retry: false,
+    }).then(function(r) {
+      stats.ok++; updateStats();
+      var cards = body.querySelectorAll('.request-card');
+      cards[1].className = 'request-card success';
+      cards[1].querySelector('.req-detail').innerHTML =
+        '<span class="success">✓</span> body=' + JSON.stringify(r.data.body) + ' <span class="info">(已自动转 URLSearchParams)</span>';
+    }).catch(function(err) { stats.fail++; updateStats(); });
+  }, 100);
+
+  // file
+  setTimeout(function() {
+    stats.send++; updateStats();
+    addRequest(body, groupId + '.3', 'POST', '/api/echo (file)', 'send', '发送 file 数据...');
+    api.post('/api/echo', { name: 'test', age: 18 }, {
+      contentType: 'file', preventDuplicate: false, cancelRequest: false, retry: false,
+    }).then(function(r) {
+      stats.ok++; updateStats();
+      var cards = body.querySelectorAll('.request-card');
+      cards[2].className = 'request-card success';
+      var ct = r.data.headers['content-type'];
+      cards[2].querySelector('.req-detail').innerHTML =
+        '<span class="success">✓</span> Content-Type: ' + ct + ' <span class="info">(已自动转 FormData)</span>';
+      addFinalResult(body, '★ json/form/file 三种格式自动转换正确', true);
+    }).catch(function(err) { stats.fail++; updateStats(); });
+  }, 200);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

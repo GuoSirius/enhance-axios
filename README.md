@@ -73,27 +73,44 @@ api.get('/search', { q: 'keyword' }, {
 
 ### Content-Type 简化
 
-默认 `'json'`，自动设置 `Content-Type` 头。
+默认 `'json'`，自动设置 `Content-Type` 头并转换数据格式。
 
 ```ts
-// json（默认，application/json;charset=UTF-8）
-api.post('/submit', data);
+// json（默认）→ 自动 JSON.stringify
+api.post('/submit', { name: 'test' });
 
-// form（application/x-www-form-urlencoded）
-api.post('/login', params, { contentType: 'form' });
+// form → 自动转 URLSearchParams
+api.post('/login', { username: 'admin', password: '123' }, { contentType: 'form' });
 
-// file — 不设置 Content-Type（multipart/form-data 由浏览器自动带 boundary）
-api.post('/upload', fd, { contentType: 'file' });
+// file → 自动转 FormData
+api.post('/upload', { name: 'test', avatar: file }, { contentType: 'file' });
 
-// 自定义
+// 自定义 Content-Type（不转换数据）
 api.post('/data', body, { contentType: 'text/plain' });
 ```
 
 **规则：**
 - `contentType` 未设置 / `null` → 默认 `'json'`
-- `headers` 中已有 `content-type` (大小写不敏感) → 跳过
-- `contentType: 'file'` → 始终跳过（浏览器自动处理）
-- 其他值 → 用 `CONTENT_TYPE_MAP` 查找，找不到则直接使用
+- `headers` 中已有 `content-type` (大小写不敏感) → 跳过设置，但**仍会根据该 Content-Type 自动转换数据**
+- `'json'` / 默认 / 自定义字符串 → `JSON.stringify(data)`（仅当 data 为对象时）
+- `'file'` → `getFormData(data)` 转 FormData，不设置 Content-Type（浏览器自动带 boundary）
+- `'form'` → `new URLSearchParams(data)` 转查询字符串
+- 已是 FormData / URLSearchParams / 字符串 → 不做转换
+
+### 缓存破坏 (cacheBusting)
+
+GET/HEAD/OPTIONS 请求默认自动在 params 中添加 `_` 参数（时间戳），防止浏览器或代理缓存。参数在 requestKey 生成之后添加，不影响防重复/取消请求的 key 匹配。
+
+```ts
+// 默认开启
+api.get('/data');  // → /data?_=lq8x3f
+
+// 关闭（实例级）
+const api = createEnhanceInstance({ baseURL: '/api', cacheBusting: false });
+
+// 关闭（请求级）
+api.get('/data', null, { cacheBusting: false });
+```
 
 ### 3. 失败重试 (retry)
 
@@ -110,10 +127,9 @@ api.get('/data', null, {
 });
 ```
 
-**默认重试条件**：网络错误（无 response）或 5xx（500-599）
-默认 `statusCodes`: `[408, 429, 500, 502, 503, 504]`
+**默认重试条件**：网络错误（无 response）、408（超时）、429（限流）、5xx（服务器错误）
 
-**2xx 业务码重试**：内置支持，直接在 `retryCondition` 中判断业务码即可：
+**2xx 业务码重试**：直接在 `retryCondition` 中判断：
 
 ```ts
 api.get('/data', null, {
@@ -208,6 +224,9 @@ const api = createEnhanceInstance({
   baseURL: '/api',
   timeout: 10000,
 
+  // 缓存破坏（默认开启，GET/HEAD/OPTIONS 自动加 _ 参数）
+  cacheBusting: true,
+
   preventDuplicate: {
     enabled: true,
     methods: ['POST', 'PUT', 'PATCH', 'DELETE'],
@@ -225,10 +244,11 @@ const api = createEnhanceInstance({
     retryDelay: 1000,
     exponential: true,
     maxDelay: 30000,
-    statusCodes: [408, 429, 500, 502, 503, 504],
     retryCondition: (error) => {
       if (!error.response) return true;
-      if (error.response.status >= 500 && error.response.status < 600) return true;
+      const status = error.response.status;
+      if (status === 408 || status === 429) return true;
+      if (status >= 500 && status < 600) return true;
       return false;
     },
   },
@@ -253,7 +273,7 @@ const api = createEnhanceInstance({
 | `cancelRequest: ['GET']` | 设置 `methods` |
 | `retry: true` / `false` | 启用/关闭 |
 | `retry: 5` | 设置 `retries` |
-| `retry: [408, 429, 500]` | 设置 `statusCodes` |
+| `retry: [408, 429, 500]` | 生成 retryCondition（匹配数组中状态码或网络错误） |
 | `retry: (err) => condition` | 设置 `retryCondition` |
 
 > 非 `false` 的快捷方式暗含 `enabled: true`。`methods: undefined` / `null` = 所有方法，`methods: []` = 不应用。
@@ -357,8 +377,10 @@ cd example && node server.js
 | 业务码 | HTTP 200 + 业务码异常，验证重试 |
 | 综合 | 同时测试防重复 + 取消 + 重试 |
 | 单次 | 禁用增强的普通请求 |
+| 缓存破坏 | 验证所有请求自动追加 _ 参数 |
+| 数据转换 | 验证 json/form/file 自动转换数据格式 |
 
-Mock 接口：`/api/submit`、`/api/search`、`/api/data`、`/api/error`、`/api/network-error`、`/api/business-error`、`/api/success`、`/api/users`
+Mock 接口：`/api/submit`、`/api/search`、`/api/data`、`/api/echo`、`/api/error`、`/api/network-error`、`/api/business-error`、`/api/success`、`/api/users`
 
 ## 问题排查
 
