@@ -334,7 +334,7 @@ function normalizePreventConfig(
 
   // object -> 合并
   return {
-    enabled: (config as PreventDuplicateConfig).enabled ?? defaults.enabled,
+    enabled: (config as PreventDuplicateConfig).enabled ?? true,
     requestKey: (config as PreventDuplicateConfig).requestKey ?? defaults.requestKey,
     methods: (config as PreventDuplicateConfig).methods !== undefined
       ? (config as PreventDuplicateConfig).methods
@@ -373,7 +373,7 @@ function normalizeCancelConfig(
   }
 
   return {
-    enabled: (config as CancelRequestConfig).enabled ?? defaults.enabled,
+    enabled: (config as CancelRequestConfig).enabled ?? true,
     requestKey: (config as CancelRequestConfig).requestKey ?? defaults.requestKey,
     methods: (config as CancelRequestConfig).methods !== undefined
       ? (config as CancelRequestConfig).methods
@@ -428,7 +428,7 @@ function normalizeRetryConfig(
   }
 
   return {
-    enabled: (config as RetryConfig).enabled ?? defaults.enabled,
+    enabled: (config as RetryConfig).enabled ?? true,
     retries: (config as RetryConfig).retries ?? defaults.retries,
     retryDelay: (config as RetryConfig).retryDelay ?? defaults.retryDelay,
     retryCondition: (config as RetryConfig).retryCondition ?? defaults.retryCondition,

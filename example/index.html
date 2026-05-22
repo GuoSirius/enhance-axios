@@ -600,8 +600,8 @@ function testCacheBust() {
       var cards = body.querySelectorAll('.request-card');
       cards[seq - 1].className = 'request-card success';
       cards[seq - 1].querySelector('.req-detail').innerHTML =
-        '<span class="success">✓</span> query=' + JSON.stringify(r.data && r.data.query) +
-        ' <span class="info">(_=' + (r.data && r.data.query && r.data.query._) + ')</span>';
+        '<span class="success">✓</span> query=' + JSON.stringify(r.data.data && r.data.data.query) +
+        ' <span class="info">(_=' + (r.data.data && r.data.data.query && r.data.data.query._) + ')</span>';
       if (seq === 2) addFinalResult(body, '★ 两个请求 _ 参数不同，缓存破坏生效', true);
     }).catch(function(err) {
       stats.fail++; updateStats();
@@ -632,7 +632,7 @@ function testAutoTransform() {
     var cards = body.querySelectorAll('.request-card');
     cards[0].className = 'request-card success';
     cards[0].querySelector('.req-detail').innerHTML =
-      '<span class="success">✓</span> body=' + JSON.stringify(r.data.body) + ' <span class="info">(已自动 JSON.stringify)</span>';
+      '<span class="success">✓</span> body=' + JSON.stringify(r.data.data && r.data.data.body) + ' <span class="info">(已自动 JSON.stringify)</span>';
   }).catch(function(err) { stats.fail++; updateStats(); });
 
   // form
@@ -646,7 +646,7 @@ function testAutoTransform() {
       var cards = body.querySelectorAll('.request-card');
       cards[1].className = 'request-card success';
       cards[1].querySelector('.req-detail').innerHTML =
-        '<span class="success">✓</span> body=' + JSON.stringify(r.data.body) + ' <span class="info">(已自动转 URLSearchParams)</span>';
+        '<span class="success">✓</span> body=' + JSON.stringify(r.data.data && r.data.data.body) + ' <span class="info">(已自动转 URLSearchParams)</span>';
     }).catch(function(err) { stats.fail++; updateStats(); });
   }, 100);
 
@@ -660,7 +660,7 @@ function testAutoTransform() {
       stats.ok++; updateStats();
       var cards = body.querySelectorAll('.request-card');
       cards[2].className = 'request-card success';
-      var ct = r.data.headers['content-type'];
+      var ct = r.data.data && r.data.data.headers && r.data.data.headers['content-type'];
       cards[2].querySelector('.req-detail').innerHTML =
         '<span class="success">✓</span> Content-Type: ' + ct + ' <span class="info">(已自动转 FormData)</span>';
       addFinalResult(body, '★ json/form/file 三种格式自动转换正确', true);
