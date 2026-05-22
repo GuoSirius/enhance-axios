@@ -1,3 +1,5 @@
 - [auto-commit-after-phase](auto-commit-after-phase.md) — commit after each implementation phase
+- [claude-config-must-commit](claude-config-must-commit.md) — .claude directory must always be committed
+- [plan-md-maintain](plan-md-maintain.md) — plan.md must be kept, updated incrementally
 - [project-overview](project-overview.md) — project overview and build config
 - [user-role](user-role.md) — user role information
