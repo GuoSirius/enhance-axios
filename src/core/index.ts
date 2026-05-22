@@ -334,7 +334,7 @@ function normalizePreventConfig(
 
   // object -> 合并
   return {
-    enabled: (config as PreventDuplicateConfig).enabled ?? true,
+    enabled: (config as PreventDuplicateConfig).enabled ?? defaults.enabled,
     requestKey: (config as PreventDuplicateConfig).requestKey ?? defaults.requestKey,
     methods: (config as PreventDuplicateConfig).methods !== undefined
       ? (config as PreventDuplicateConfig).methods
@@ -373,7 +373,7 @@ function normalizeCancelConfig(
   }
 
   return {
-    enabled: (config as CancelRequestConfig).enabled ?? true,
+    enabled: (config as CancelRequestConfig).enabled ?? defaults.enabled,
     requestKey: (config as CancelRequestConfig).requestKey ?? defaults.requestKey,
     methods: (config as CancelRequestConfig).methods !== undefined
       ? (config as CancelRequestConfig).methods
@@ -428,7 +428,7 @@ function normalizeRetryConfig(
   }
 
   return {
-    enabled: (config as RetryConfig).enabled ?? true,
+    enabled: (config as RetryConfig).enabled ?? defaults.enabled,
     retries: (config as RetryConfig).retries ?? defaults.retries,
     retryDelay: (config as RetryConfig).retryDelay ?? defaults.retryDelay,
     retryCondition: (config as RetryConfig).retryCondition ?? defaults.retryCondition,
@@ -462,12 +462,13 @@ function getEffectiveConfig(
     cancel: InternalCancelConfig;
   }
 ): { prevent: InternalPreventConfig; cancel: InternalCancelConfig } {
+  // 请求级显式配置 → instanceDefaults 中 enabled 强制为 true（传 object 即 opt-in）
   const prevent = isConfigSet(config.preventDuplicate)
-    ? normalizePreventConfig(config.preventDuplicate, instanceDefaults.prevent)
+    ? normalizePreventConfig(config.preventDuplicate, { ...instanceDefaults.prevent, enabled: true })
     : { ...instanceDefaults.prevent };
 
   const cancel = isConfigSet(config.cancelRequest)
-    ? normalizeCancelConfig(config.cancelRequest, instanceDefaults.cancel)
+    ? normalizeCancelConfig(config.cancelRequest, { ...instanceDefaults.cancel, enabled: true })
     : { ...instanceDefaults.cancel };
 
   return { prevent, cancel };
@@ -752,7 +753,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       // ─────────────────────────────────────────────────────────────────────
       // 检查业务码重试（2xx 但业务逻辑失败）
       // ─────────────────────────────────────────────────────────────────────
-      const retryConfig = normalizeRetryConfig(config.retry, defaultRetry);
+      const retryConfig = normalizeRetryConfig(config.retry, isConfigSet(config.retry) ? { ...defaultRetry, enabled: true } : defaultRetry);
       if (retryConfig.enabled && shouldApply(config.method, retryConfig.methods)) {
         const syntheticError = new Error('Business logic error') as AxiosError;
         syntheticError.config = config;
@@ -793,7 +794,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // 情况 3：重试
-      const retryConfig = normalizeRetryConfig(config.retry, defaultRetry);
+      const retryConfig = normalizeRetryConfig(config.retry, isConfigSet(config.retry) ? { ...defaultRetry, enabled: true } : defaultRetry);
       if (retryConfig.enabled && shouldApply(config.method, retryConfig.methods)) {
         const retryCount = (config as any).__retryCount || 0;
 
