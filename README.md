@@ -99,11 +99,12 @@ api.post('/data', body, { contentType: 'text/plain' });
 
 ### 缓存破坏 (cacheBusting)
 
-GET/HEAD/OPTIONS 请求默认自动在 params 中添加 `_` 参数（时间戳），防止浏览器或代理缓存。参数在 requestKey 生成之后添加，不影响防重复/取消请求的 key 匹配。
+所有请求默认自动在 params 中添加 `_` 参数（时间戳），防止浏览器或代理缓存。参数在 requestKey 生成之后添加，不影响防重复/取消请求的 key 匹配。
 
 ```ts
-// 默认开启
-api.get('/data');  // → /data?_=lq8x3f
+// 默认开启，所有方法都加
+api.get('/data');   // → /data?_=lq8x3f
+api.post('/submit', { name: 'test' });  // → /submit?_=lq8x3f
 
 // 关闭（实例级）
 const api = createEnhanceInstance({ baseURL: '/api', cacheBusting: false });

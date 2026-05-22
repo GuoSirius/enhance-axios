@@ -44,3 +44,7 @@ coverage/
 # Misc
 *.local
 *.cache
+
+# Playwright / test artifacts
+.playwright-mcp/
+*.png

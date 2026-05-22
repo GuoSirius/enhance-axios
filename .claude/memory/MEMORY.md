@@ -1,0 +1,3 @@
+- [auto-commit-after-phase](auto-commit-after-phase.md) — commit after each implementation phase
+- [project-overview](project-overview.md) — project overview and build config
+- [user-role](user-role.md) — user role information
