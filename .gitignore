@@ -47,4 +47,3 @@ coverage/
 
 # Playwright / test artifacts
 .playwright-mcp/
-*.png
