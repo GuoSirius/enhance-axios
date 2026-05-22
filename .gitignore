@@ -42,7 +42,6 @@ coverage/
 *.tsbuildinfo
 
 # Misc
-*.local
 *.cache
 
 # Playwright / test artifacts
