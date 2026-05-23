@@ -54,7 +54,9 @@
       "Bash(echo \"Tests: $\\(npx vitest run 2>&1)",
       "Bash(node -e \"console.log\\(require\\('./package.json'\\).version\\)\")",
       "Bash(npx husky *)",
-      "Bash(npx commitlint *)"
+      "Bash(npx commitlint *)",
+      "Bash(npx eslint *)",
+      "Bash(mv eslint.config.js eslint.config.mjs)"
     ]
   }
 }

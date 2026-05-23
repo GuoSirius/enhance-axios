@@ -574,7 +574,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
   const enhanceInstance: EnhanceInstance = {
     requestManager,
     clearAll: () => {
-      for (const [key, deferred] of pendingReturns) {
+      for (const [_key, deferred] of pendingReturns) {
         try { deferred.reject(new Error('All requests cleared')); } catch { }
       }
       pendingReturns.clear();
