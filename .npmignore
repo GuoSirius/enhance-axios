@@ -1,0 +1,14 @@
+src/
+tests/
+example/
+.husky/
+.github/
+scripts/
+commitlint.config.js
+tsup.config.ts
+tsconfig.json
+vitest.config.ts
+.gitignore
+plan.md
+CLAUDE.md
+node_modules/

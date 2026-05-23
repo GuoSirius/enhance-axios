@@ -1,7 +1,11 @@
 {
   "name": "enhance-axios",
   "version": "1.0.0",
-  "description": "axios 增强库，支持防重复提交、取消请求和失败重试",
+  "description": "axios 增强库，支持防重复提交、取消请求、失败重试、缓存破坏和数据自动转换",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GuoSirius/enhance-axios.git"
+  },
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.mjs",
   "types": "dist/esm/index.d.mts",
@@ -50,7 +54,9 @@
     "example": "tsup && node example/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "prepare": "husky",
+    "release": "node scripts/release.js"
   },
   "keywords": [
     "axios",
@@ -61,6 +67,10 @@
     "retry"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
@@ -68,11 +78,15 @@
     "axios": ">=1.7.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.1",
+    "@commitlint/config-conventional": "^21.0.1",
     "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.59.4",
     "@typescript-eslint/parser": "^8.59.4",
     "axios": "^1.16.1",
     "eslint": "^10.4.0",
+    "husky": "^9.1.7",
+    "standard-version": "^9.5.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"

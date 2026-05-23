@@ -51,7 +51,10 @@
       "Bash(git rm *)",
       "Bash(git checkout *)",
       "Bash(git check-ignore *)",
-      "Bash(echo \"Tests: $\\(npx vitest run 2>&1)"
+      "Bash(echo \"Tests: $\\(npx vitest run 2>&1)",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).version\\)\")",
+      "Bash(npx husky *)",
+      "Bash(npx commitlint *)"
     ]
   }
 }
