@@ -43,7 +43,7 @@ enhance-axios/
 ├── tsup.config.ts
 ├── vitest.config.ts
 ├── .gitignore
-├── plan.md
+├── CLAUDE.md
 └── README.md
 ```
 
