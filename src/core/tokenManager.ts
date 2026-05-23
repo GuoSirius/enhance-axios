@@ -53,14 +53,22 @@ export class TokenManager {
     if (!shouldUseToken(config, this.needTokenDefault)) return;
 
     if (this.pendingRefresh) {
-      const info = await this.pendingRefresh;
-      setHeader(config, info.accessToken, this.auth);
-      return;
+      try {
+        const info = await this.pendingRefresh;
+        setHeader(config, info.accessToken, this.auth);
+        return;
+      } catch {
+        this.pendingRefresh = null; // 上次刷新失败，重新尝试
+      }
     }
 
-    const local = await Promise.resolve(this.auth.getLocalToken());
-    if (local) {
-      setHeader(config, local.accessToken, this.auth);
+    try {
+      const local = await Promise.resolve(this.auth.getLocalToken());
+      if (local) {
+        setHeader(config, local.accessToken, this.auth);
+      }
+    } catch {
+      // getLocalToken 异常 → 静默跳过，等响应时触发刷新
     }
   }
 
@@ -89,12 +97,6 @@ export class TokenManager {
     const info = await this.pendingRefresh;
     this.pendingRefresh = null;
     setHeader(config, info.accessToken, this.auth);
-
-    // 重试前清除旧的 requestManager 注册，避免步骤 4 防重复拦截
-    if ((config as any).__controller) {
-      try { (config as any).__controller.abort(); } catch { /* noop */ }
-    }
-
     return true;
   }
 
