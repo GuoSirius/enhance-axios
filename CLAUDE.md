@@ -81,7 +81,17 @@ enhance-axios/
 - 重试时 `{ ...params, _: stamp }` 覆盖旧值，不累积
 - 默认 true，仅 `needCacheBust: false` 关闭
 
-### 6. 配置归一化
+### 6. Token 认证 (tokenAuth)
+- 实例级配置 token 生命周期管理（getLocalToken/refreshToken/setLocalToken）
+- 请求拦截器自动注入 header（默认 Authorization: Bearer xxx）
+- 响应拦截器 resolve 和 reject 两处检测 token 过期
+- 并发刷新排队机制：多个 401 只触发一次 refreshToken
+- needToken 支持实例级/请求级 boolean 和函数动态判断
+- 可自定义 headerName、headerFormat（字符串模板或函数）
+- shouldRefreshToken 默认检测 HTTP 401 或业务码 401
+- tokenFailureHandler 默认 console.warn，用户可覆盖（如跳转登录）
+
+### 7. 缓存破坏 (needCacheBust)
 - 对象默认 `enabled: ?? true`（传入即 opt-in）
 - 非 false 快捷方式暗含 enabled: true
 - methods: undefined/null = 所有方法，methods: [] = 不应用
