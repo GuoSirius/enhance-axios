@@ -17,8 +17,11 @@ const path = require('path');
 const fs = require('fs');
 
 const ROOT = path.resolve(__dirname, '..');
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const question = (q) => new Promise(resolve => rl.question(q, resolve));
+
+function question(q) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => rl.question(q, (ans) => { rl.close(); resolve(ans); }));
+}
 
 function run(cmd, opts = {}) {
   console.log(`\n> ${cmd}`);
@@ -50,12 +53,9 @@ function selectVersion(current, choices) {
     let selected = 0;
 
     function render() {
-      // Clear previous render (move cursor up 4 lines)
-      if (selected > 0 || process.stdout.cursorTo) {
-        readline.cursorTo(process.stdout, 0);
-        readline.moveCursor(process.stdout, 0, -4);
-        readline.clearScreenDown(process.stdout);
-      }
+      readline.cursorTo(process.stdout, 0);
+      readline.moveCursor(process.stdout, 0, -4);
+      readline.clearScreenDown(process.stdout);
 
       console.log(`  Current: ${current}\n`);
       choices.forEach((c, i) => {
@@ -69,7 +69,7 @@ function selectVersion(current, choices) {
 
     render();
 
-    process.stdin.on('keypress', (_str, key) => {
+    const onKeypress = (_str, key) => {
       if (key.name === 'up') {
         selected = (selected - 1 + choices.length) % choices.length;
         render();
@@ -77,15 +77,17 @@ function selectVersion(current, choices) {
         selected = (selected + 1) % choices.length;
         render();
       } else if (key.name === 'return') {
+        process.stdin.removeListener('keypress', onKeypress);
         process.stdin.setRawMode(false);
-        process.stdin.removeAllListeners('keypress');
         console.log(`\n  Selected: ${choices[selected].label} → ${choices[selected].preview}`);
         resolve(choices[selected].label);
       } else if (key.ctrl && key.name === 'c') {
         process.stdin.setRawMode(false);
         process.exit(0);
       }
-    });
+    };
+
+    process.stdin.on('keypress', onKeypress);
   });
 }
 
@@ -173,8 +175,6 @@ async function main() {
   console.log(`\n╔══════════════════════════════════════════╗`);
   console.log(`║   Released v${newVersion}                    ║`);
   console.log(`╚══════════════════════════════════════════╝\n`);
-
-  rl.close();
 }
 
 main().catch(err => {
