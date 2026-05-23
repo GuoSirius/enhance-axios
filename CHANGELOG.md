@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.1.0](https://github.com/GuoSirius/enhance-axios/compare/v1.0.4...v1.1.0) (2026-05-23)
+
+
+### Features
+
+* add token auth module with TokenManager ([67c8b1a](https://github.com/GuoSirius/enhance-axios/commit/67c8b1ac05843bbb804e266bf6459dad9c439f12))
+
+
+### Bug Fixes
+
+* await setLocalToken in refresh chain, fix test infinite retry loops ([624304d](https://github.com/GuoSirius/enhance-axios/commit/624304dad8fb16a00ef67f523860a68915992ba5))
+* handle pendingRefresh rejection, getLocalToken exception, remove controller leak ([dbc7765](https://github.com/GuoSirius/enhance-axios/commit/dbc77658cfe6b1ca110fc143846f85abf1d80b57))
+* remove reference to deleted defaultTokenFailure ([6c0be3c](https://github.com/GuoSirius/enhance-axios/commit/6c0be3cbe2593012d3ea17a35a65d4ac31f2383c))
+* rename clearPendingRefresh→handleRefreshFailure everywhere, fix tests ([88db5ad](https://github.com/GuoSirius/enhance-axios/commit/88db5add775edffc796b3f00265eae729d958d9f))
+* rewrite TokenManager, fix cleanup before retry ([ace9fd4](https://github.com/GuoSirius/enhance-axios/commit/ace9fd48f6f556c347064bce2eff4ed9fa717885))
+* use fork pool for vitest to prevent OOM hang during release ([eb65b9d](https://github.com/GuoSirius/enhance-axios/commit/eb65b9d14d9f38436c78f77dee407941b348adf6))
+* use npx vitest run (cross-platform), pool:forks in config handles OOM ([334dcb0](https://github.com/GuoSirius/enhance-axios/commit/334dcb0fbdab41a3b0e6da1073991ac60b97552d))
+
+
+### Tests
+
+* add token auth tests (5 tests) ([46d5ecf](https://github.com/GuoSirius/enhance-axios/commit/46d5ecfc9f9916f283f6c7392633d54405ae935c))
+* add token refresh and header format tests (8 tests) ([41bbb71](https://github.com/GuoSirius/enhance-axios/commit/41bbb7197c001fb5c860f39b70b7baff705f1947))
+
+
+### Code Refactoring
+
+* extract dataTransform into separate module ([3a8c186](https://github.com/GuoSirius/enhance-axios/commit/3a8c18693ce9768a6b0cd9e29a31c15007b7dbd6))
+* extract retry and helpers modules, clean up index.ts ([0cb956b](https://github.com/GuoSirius/enhance-axios/commit/0cb956b3544b7b40180befbf6468a646e789005d))
+
+
+### Documentation
+
+* add token auth feature to CLAUDE.md ([81741c6](https://github.com/GuoSirius/enhance-axios/commit/81741c6f48ff43cf42ba277d649d29484203f51b))
+* update CLAUDE.md with token feature, module structure, test count ([9c5cb4f](https://github.com/GuoSirius/enhance-axios/commit/9c5cb4fba0f03b82850b5b254bd833b11252dbb0))
+
 ### [1.0.4](https://github.com/GuoSirius/enhance-axios/compare/v1.0.3...v1.0.4) (2026-05-23)
 
 
