@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.4](https://github.com/GuoSirius/enhance-axios/compare/v1.0.3...v1.0.4) (2026-05-23)
+
+
+### Bug Fixes
+
+* release script syncs version.ts only, dist handled by workflow ([0e02fce](https://github.com/GuoSirius/enhance-axios/commit/0e02fceee650e26ed70c376bc7d84ff6344a6f94))
+
+
+### Documentation
+
+* merge plan.md into CLAUDE.md, remove duplicate ([fe5f9a7](https://github.com/GuoSirius/enhance-axios/commit/fe5f9a7cd17fd03807a3de3ca2c40f04f89849a3))
+
+
+### Code Refactoring
+
+* read version from package.json, remove generated version.ts ([9384938](https://github.com/GuoSirius/enhance-axios/commit/9384938d54b7ba17a1daf2526c3b7ff9825b45c0))
+
 ### [1.0.3](https://github.com/GuoSirius/enhance-axios/compare/v1.0.2...v1.0.3) (2026-05-23)
 
 
