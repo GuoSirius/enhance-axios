@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.3](https://github.com/GuoSirius/enhance-axios/compare/v1.0.2...v1.0.3) (2026-05-23)
+
+
+### Bug Fixes
+
+* smooth version selector rendering with ANSI escape codes ([b8102cf](https://github.com/GuoSirius/enhance-axios/commit/b8102cfe192132945c5995440e57b650d2c11827))
+* sync version.ts and rebuild after standard-version bump ([c3442fa](https://github.com/GuoSirius/enhance-axios/commit/c3442fa36e3cf3a3ef85c355caf00143b1ff180b))
+
 ### [1.0.2](https://github.com/GuoSirius/enhance-axios/compare/v1.0.1...v1.0.2) (2026-05-23)
 
 
