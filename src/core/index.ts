@@ -104,7 +104,7 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { RequestManager } from './requestManager';
-import { resolveRequestKey, getFormData } from '../utils';
+import { resolveRequestKey } from '../utils';
 import type {
   CreateEnhanceOptions,
   EnhanceInstance,
@@ -122,6 +122,7 @@ import type {
 import { CONTENT_TYPE_MAP } from '../types';
 import type { TokenInfo, TokenAuthConfig } from '../types';
 import { TokenManager } from './tokenManager';
+import { getDataFormat, injectDataTransform } from './dataTransform';
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 存储防重复请求的延迟 Promise
@@ -230,47 +231,6 @@ function calculateRetryDelay(
     );
   }
   return delay;
-}
-
-// ════════════════════════════════════════════════════════════════════════════════
-// 数据自动转换（transformRequest 注入）
-// ════════════════════════════════════════════════════════════════════════════════
-
-function getDataFormat(config: AxiosRequestConfig): string | undefined {
-  const headers = config.headers || {};
-  const ctKey = Object.keys(headers).find(k => k.toLowerCase() === 'content-type');
-  if (ctKey) {
-    const ct = String(headers[ctKey]).toLowerCase();
-    if (ct.includes('multipart/form-data')) return 'file';
-    if (ct.includes('application/x-www-form-urlencoded')) return 'form';
-    if (ct.includes('application/json') || ct.includes('+json')) return 'json';
-  }
-  return config.contentType;
-}
-
-function injectDataTransform(
-  config: AxiosRequestConfig,
-  format: 'file' | 'form',
-  instance: AxiosInstance,
-): void {
-  if ((config as any).__dataTransformInjected) return;
-  (config as any).__dataTransformInjected = true;
-
-  const ourTransform = (data: unknown) => {
-    if (data == null || data instanceof FormData || data instanceof URLSearchParams) return data;
-    if (typeof data !== 'object') return data;
-    if (format === 'file') return getFormData(data);
-    return new URLSearchParams(data as Record<string, string>);
-  };
-
-  const existing = config.transformRequest;
-  const defaults = instance.defaults.transformRequest;
-  const source = existing != null ? existing : defaults;
-  let chain: ((...args: any[]) => any)[] = [];
-  if (source != null) {
-    chain = Array.isArray(source) ? [...source] : [source];
-  }
-  config.transformRequest = [ourTransform, ...chain];
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
