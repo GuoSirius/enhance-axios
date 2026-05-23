@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { createEnhanceInstance } from '../src';
 
+const mockAdapter = () => Promise.resolve({
+  data: { code: 0, message: 'ok', data: {} },
+  status: 200,
+  statusText: 'OK',
+  headers: {},
+  config: {},
+});
+
 describe('enhance-axios', () => {
   let api: ReturnType<typeof createEnhanceInstance>;
 
@@ -48,7 +56,7 @@ describe('enhance-axios', () => {
         preventDuplicate: { intervalMs: 2000 },
       });
       expect(() => {
-        instance.get('/test', null, { preventDuplicate: false });
+        instance.get('/test', null, { preventDuplicate: false, adapter: mockAdapter });
       }).not.toThrow();
     });
   });
@@ -135,45 +143,46 @@ describe('enhance-axios', () => {
   });
 
   describe('RESTful 方法参数格式', () => {
+    const adapter = mockAdapter;
     it('GET 请求正确传递 params', () => {
       const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
       expect(() => {
-        instance.get('/test', { page: 1 });
+        instance.get('/test', { page: 1 }, { adapter });
       }).not.toThrow();
     });
 
     it('POST 请求正确传递 data', () => {
       const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
       expect(() => {
-        instance.post('/test', { name: 'test' });
+        instance.post('/test', { name: 'test' }, { adapter });
       }).not.toThrow();
     });
 
     it('PUT 请求正确传递 data', () => {
       const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
       expect(() => {
-        instance.put('/test', { id: 1, name: 'updated' });
+        instance.put('/test', { id: 1, name: 'updated' }, { adapter });
       }).not.toThrow();
     });
 
     it('DELETE 请求正确传递 params', () => {
       const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
       expect(() => {
-        instance.delete('/test/1', { page: 1 });
+        instance.delete('/test/1', { page: 1 }, { adapter });
       }).not.toThrow();
     });
 
     it('PATCH 请求正确传递 data', () => {
       const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
       expect(() => {
-        instance.patch('/test/1', { status: 'done' });
+        instance.patch('/test/1', { status: 'done' }, { adapter });
       }).not.toThrow();
     });
 
     it('支持 null 作为第二个参数', () => {
       const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
       expect(() => {
-        instance.get('/test', null, { preventDuplicate: false });
+        instance.get('/test', null, { preventDuplicate: false, adapter });
       }).not.toThrow();
     });
   });

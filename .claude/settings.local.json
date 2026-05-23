@@ -56,7 +56,9 @@
       "Bash(npx husky *)",
       "Bash(npx commitlint *)",
       "Bash(npx eslint *)",
-      "Bash(mv eslint.config.js eslint.config.mjs)"
+      "Bash(mv eslint.config.js eslint.config.mjs)",
+      "Bash(node scripts/release.js)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

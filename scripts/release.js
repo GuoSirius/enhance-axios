@@ -51,9 +51,15 @@ async function main() {
   console.log('[1/5] Running typecheck and tests...\n');
   try {
     run('npx tsc --noEmit');
-    run('npx vitest run');
   } catch {
-    console.error('\n✗ Typecheck or tests failed. Fix errors before releasing.');
+    console.error('\n✗ Typecheck failed. Fix errors before releasing.');
+    process.exit(1);
+  }
+
+  const testOutput = runSilent('npx vitest run 2>&1');
+  if (!/Tests\s+\d+\s+passed/.test(testOutput) || /Tests\s+\d+\s+failed/.test(testOutput)) {
+    console.error('\n✗ Tests failed. Fix errors before releasing.');
+    console.error(testOutput.split('\n').slice(-20).join('\n'));
     process.exit(1);
   }
   console.log('✓ Typecheck and tests passed.\n');
