@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.2](https://github.com/GuoSirius/enhance-axios/compare/v1.0.1...v1.0.2) (2026-05-23)
+
+
+### Continuous Integration
+
+* bump node to 24, add workflow_dispatch trigger ([9136e21](https://github.com/GuoSirius/enhance-axios/commit/9136e2136b4e0bedb21020e775e854b18dfdf1f1))
+* move permissions to workflow level for release workflow ([7bd041f](https://github.com/GuoSirius/enhance-axios/commit/7bd041f8a2d701498796201d40591a338a161e06))
+
 ### 1.0.1 (2026-05-23)
 
 
