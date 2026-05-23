@@ -22,11 +22,11 @@ const question = (q) => new Promise(resolve => rl.question(q, resolve));
 
 function run(cmd, opts = {}) {
   console.log(`\n> ${cmd}`);
-  return execSync(cmd, { cwd: ROOT, stdio: 'inherit', ...opts });
+  return execSync(cmd, { cwd: ROOT, stdio: 'inherit', shell: true, ...opts });
 }
 
 function runSilent(cmd) {
-  return execSync(cmd, { cwd: ROOT, encoding: 'utf-8', stdio: 'pipe' }).trim();
+  return execSync(cmd, { cwd: ROOT, encoding: 'utf-8', stdio: 'pipe', shell: true }).trim();
 }
 
 function getCurrentVersion() {
@@ -56,7 +56,7 @@ async function main() {
     process.exit(1);
   }
 
-  const testOutput = runSilent('npx vitest run 2>&1');
+  const testOutput = runSilent('npx vitest run');
   if (!/Tests\s+\d+\s+passed/.test(testOutput) || /Tests\s+\d+\s+failed/.test(testOutput)) {
     console.error('\n✗ Tests failed. Fix errors before releasing.');
     console.error(testOutput.split('\n').slice(-20).join('\n'));
