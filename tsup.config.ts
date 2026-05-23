@@ -2,21 +2,9 @@ import { defineConfig, Options } from 'tsup';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { readFileSync, writeFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// 读取 package.json 中的版本号
-const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8'));
-const version = packageJson.version;
-
-// 生成 version.ts 文件（自动从 package.json 读取版本）
-const versionContent = `// 此文件由构建脚本自动生成，请勿手动修改
-export const version = '${version}';
-export default version;
-`;
-writeFileSync(resolve(__dirname, 'src/version.ts'), versionContent);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 构建配置说明

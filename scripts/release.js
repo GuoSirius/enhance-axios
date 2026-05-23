@@ -165,19 +165,6 @@ async function main() {
     process.exit(1);
   }
 
-  // ─── Step 4.5: Sync version.ts ───
-  console.log('\n[4.5/5] Syncing version.ts...\n');
-  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
-  const ver = pkg.version;
-  const verContent = `// 此文件由构建脚本自动生成，请勿手动修改
-export const version = '${ver}';
-export default version;
-`;
-  fs.writeFileSync(path.join(ROOT, 'src', 'version.ts'), verContent);
-  console.log(`  ✓ src/version.ts → ${ver}`);
-  run('git add src/version.ts');
-  run('git commit --amend --no-edit');
-
   // ─── Step 5: Push to both remotes ───
   console.log('\n[5/5] Pushing to remotes...\n');
 
