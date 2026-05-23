@@ -42,6 +42,53 @@ function bumpVersion(version, type) {
   return parts.join('.');
 }
 
+function selectVersion(current, choices) {
+  return new Promise((resolve) => {
+    readline.emitKeypressEvents(process.stdin);
+    process.stdin.setRawMode(true);
+
+    let selected = 0;
+
+    function render() {
+      // Clear previous render (move cursor up 4 lines)
+      if (selected > 0 || process.stdout.cursorTo) {
+        readline.cursorTo(process.stdout, 0);
+        readline.moveCursor(process.stdout, 0, -4);
+        readline.clearScreenDown(process.stdout);
+      }
+
+      console.log(`  Current: ${current}\n`);
+      choices.forEach((c, i) => {
+        const arrow = i === selected ? '❯' : ' ';
+        const highlight = i === selected ? '\x1b[36m' : '\x1b[2m';
+        const reset = '\x1b[0m';
+        console.log(`  ${arrow} ${highlight}${c.label.padEnd(7)} → ${c.preview}${reset}`);
+      });
+      console.log('\n  ↑↓ move  ↵ confirm');
+    }
+
+    render();
+
+    process.stdin.on('keypress', (_str, key) => {
+      if (key.name === 'up') {
+        selected = (selected - 1 + choices.length) % choices.length;
+        render();
+      } else if (key.name === 'down') {
+        selected = (selected + 1) % choices.length;
+        render();
+      } else if (key.name === 'return') {
+        process.stdin.setRawMode(false);
+        process.stdin.removeAllListeners('keypress');
+        console.log(`\n  Selected: ${choices[selected].label} → ${choices[selected].preview}`);
+        resolve(choices[selected].label);
+      } else if (key.ctrl && key.name === 'c') {
+        process.stdin.setRawMode(false);
+        process.exit(0);
+      }
+    });
+  });
+}
+
 async function main() {
   console.log('╔══════════════════════════════════════════╗');
   console.log('║   enhance-axios Release Script          ║');
@@ -84,21 +131,14 @@ async function main() {
   // ─── Step 3: Choose version ───
   console.log('[3/5] Choose release version:\n');
   const current = getCurrentVersion();
-  const types = ['patch', 'minor', 'major'];
-  const previews = types.reduce((acc, t) => {
-    acc[t] = bumpVersion(current, t);
-    return acc;
-  }, {});
+  const choices = [
+    { label: 'patch', preview: bumpVersion(current, 'patch') },
+    { label: 'minor', preview: bumpVersion(current, 'minor') },
+    { label: 'major', preview: bumpVersion(current, 'major') },
+  ];
 
-  console.log(`  Current version: ${current}\n`);
-  console.log(`  [1] patch → ${previews.patch}`);
-  console.log(`  [2] minor → ${previews.minor}`);
-  console.log(`  [3] major → ${previews.major}\n`);
-
-  const choice = await question('Select [1/2/3] (default: 1): ');
-  const idx = parseInt(choice) - 1 || 0;
-  const releaseType = types[idx];
-  const newVersion = previews[releaseType];
+  const releaseType = await selectVersion(current, choices);
+  const newVersion = bumpVersion(current, releaseType);
 
   const confirm = await question(`\nRelease as ${current} → ${newVersion} (${releaseType})? [Y/n]: `);
   if (confirm.toLowerCase() === 'n') {

@@ -55,6 +55,20 @@ export default [
     },
   },
   {
+    files: ['scripts/**/*.{js,cjs}'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.es2021,
+      },
+    },
+    rules: {
+      'no-undef': 'off',
+      'no-unused-vars': 'warn',
+      'no-console': 'off',
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**', '*.config.*'],
   },
 ];
