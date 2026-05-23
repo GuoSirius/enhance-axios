@@ -3,7 +3,7 @@
  */
 
 // 引入 axios 类型
-import type { AxiosRequestConfig, AxiosError } from 'axios';
+import type { AxiosRequestConfig, AxiosError, AxiosResponse } from 'axios';
 import type { RequestManager } from '../core/requestManager';
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -194,6 +194,34 @@ export type InternalRetryConfig = RequiredKeys<
 >;
 
 // ════════════════════════════════════════════════════════════════════════════════
+// Token 认证
+// ════════════════════════════════════════════════════════════════════════════════
+
+/** Token 信息 */
+export interface TokenInfo {
+  token: string;
+  accessToken: string;
+}
+
+/** Token 认证配置 */
+export interface TokenAuthConfig {
+  /** 获取本地存储的 token，返回 TokenInfo 或 nil */
+  getLocalToken: () => TokenInfo | null | undefined | Promise<TokenInfo | null | undefined>;
+  /** 刷新 token，返回新 TokenInfo */
+  refreshToken: () => Promise<TokenInfo>;
+  /** 刷新成功后保存 token（如写入 localStorage），可选 */
+  setLocalToken?: (info: TokenInfo) => void | Promise<void>;
+  /** 判断是否需要刷新 token，响应拦截器 resolve 和 reject 都调用 */
+  shouldRefreshToken: (error: AxiosError | AxiosResponse) => boolean;
+  /** Token 无法获取或刷新失败时的回调（如跳转登录页），可选 */
+  tokenFailureHandler?: (reason: 'get' | 'refresh', error?: any) => void;
+  /** Header 字段名，默认 'Authorization' */
+  headerName?: string;
+  /** Header 值格式，默认 'Bearer {token}'，可以是字符串模板或函数 */
+  headerFormat?: string | ((token: string) => string);
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
 // AxiosRequestConfig 扩展
 // ════════════════════════════════════════════════════════════════════════════════
 
@@ -202,7 +230,7 @@ export type InternalRetryConfig = RequiredKeys<
  *
  * 扩展了 preventDuplicate、cancelRequest 和 retry 字段
  */
-export interface CreateEnhanceOptions extends AxiosRequestConfig {
+export interface CreateEnhanceOptions extends Omit<AxiosRequestConfig, 'needToken'> {
   /** Content-Type 简化配置，默认 'json' */
   contentType?: ContentType;
   /** 防重复提交配置 */
@@ -213,6 +241,10 @@ export interface CreateEnhanceOptions extends AxiosRequestConfig {
   retry?: RetryOption;
   /** 所有请求自动添加 _ 参数防止缓存，默认 true，仅 false 关闭 */
   needCacheBust?: boolean;
+  /** Token 认证配置，设置后全局开启 token 管理 */
+  tokenAuth?: TokenAuthConfig;
+  /** 实例级是否对所有请求启用 token，默认 true（仅 tokenAuth 存在时有效），支持函数动态判断 */
+  needToken?: boolean | ((config: AxiosRequestConfig) => boolean);
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -232,6 +264,8 @@ declare module 'axios' {
     retry?: RetryOption;
     /** 所有请求自动添加 _ 参数防止缓存，默认 true，仅 false 关闭 */
     needCacheBust?: boolean;
+    /** 请求级是否启用 token，覆盖实例级，仅 tokenAuth 存在时有效 */
+    needToken?: boolean;
   }
 }
 

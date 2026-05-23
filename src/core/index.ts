@@ -120,6 +120,8 @@ import type {
   RequestMethod,
 } from '../types';
 import { CONTENT_TYPE_MAP } from '../types';
+import type { TokenInfo, TokenAuthConfig } from '../types';
+import { TokenManager } from './tokenManager';
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 存储防重复请求的延迟 Promise
@@ -535,7 +537,8 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
   // ─────────────────────────────────────────────────────────────────────────
   // 创建原生 axios 实例
   // ─────────────────────────────────────────────────────────────────────────
-  const instance = axios.create(options);
+  const { tokenAuth: _ta, needToken: _nt, ...axiosOptions } = options;
+  const instance = axios.create(axiosOptions);
 
   // ─────────────────────────────────────────────────────────────────────────
   // 初始化默认配置
@@ -561,6 +564,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
   }
 
   const needCacheBust = options.needCacheBust ?? true;
+  const tokenManager = _ta ? new TokenManager(_ta, _nt) : null;
 
   // ─────────────────────────────────────────────────────────────────────────
   // 初始化请求管理器 和 延迟 Promise 存储
@@ -588,13 +592,18 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
   // 请求拦截器
   // ════════════════════════════════════════════════════════════════════════════
   instance.interceptors.request.use(
-    (config) => {
+    async (config) => {
       const method = config.method?.toUpperCase() || 'GET';
 
       // ─────────────────────────────────────────────────────────────────────
       // 步骤 1：获取有效的增强配置
       // ─────────────────────────────────────────────────────────────────────
       const { prevent, cancel } = getEffectiveConfig(config, { prevent: defaultPrevent, cancel: defaultCancel });
+
+      // ─────────────────────────────────────────────────────────────────────
+      // 步骤 1.5：Token 注入
+      // ─────────────────────────────────────────────────────────────────────
+      if (tokenManager) await tokenManager.handleRequest(config);
 
       // ─────────────────────────────────────────────────────────────────────
       // 步骤 2：处理 Content-Type
@@ -746,6 +755,12 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
     async (response) => {
       const config = response.config;
 
+      // Token 刷新（resolve 分支）
+      if (tokenManager) {
+        const retryResult = await tokenManager.handleResponse(response, config);
+        if (retryResult) return instance.request(retryResult.config);
+      }
+
       // ─────────────────────────────────────────────────────────────────────
       // 检查业务码重试（2xx 但业务逻辑失败）
       // ─────────────────────────────────────────────────────────────────────
@@ -787,6 +802,16 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       if (axios.isCancel(error)) {
         rejectAndCleanup(config, requestManager, pendingReturns, error);
         return Promise.reject(error);
+      }
+
+      // Token 刷新（reject 分支，在 retry 之前）
+      if (tokenManager) {
+        try {
+          const retryResult = await tokenManager.handleError(error, config);
+          if (retryResult) return instance.request(retryResult.config);
+        } catch (err) {
+          return Promise.reject(err);
+        }
       }
 
       // 情况 3：重试
