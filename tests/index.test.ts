@@ -972,4 +972,134 @@ describe('Token 认证 (tokenAuth)', () => {
     });
     expect(capturedHeaders['X-Auth-Token']).toBe('Bearer access-xxx');
   });
+
+  it('401 触发 refresh 并重试成功', async () => {
+    let refreshCount = 0;
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth({
+        refreshToken: async () => { refreshCount++; return mockNewToken; },
+      }),
+    });
+    const res = await instance.get('/test', null, {
+      adapter: (config: any) => {
+        // 第一次返回 401，重试时返回成功
+        if (config.headers.Authorization === 'Bearer access-xxx') {
+          return Promise.reject({
+            config, isAxiosError: true, message: 'Unauthorized',
+            response: { status: 401, data: {} },
+          });
+        }
+        return Promise.resolve({ data: { ok: true }, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(refreshCount).toBe(1);
+    expect(res.data.ok).toBe(true);
+  });
+
+  it('并发 401 只刷新一次', async () => {
+    let refreshCount = 0;
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth({
+        refreshToken: async () => { refreshCount++; return mockNewToken; },
+      }),
+    });
+
+    // 三个请求同时触发 401
+    const makeReq = () => instance.get('/test', null, {
+      adapter: (config: any) => {
+        if (config.headers.Authorization === 'Bearer access-xxx') {
+          return Promise.reject({
+            config, isAxiosError: true, message: 'Unauthorized',
+            response: { status: 401, data: {} },
+          });
+        }
+        return Promise.resolve({ data: { ok: true }, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+
+    await Promise.all([makeReq(), makeReq(), makeReq()]);
+    expect(refreshCount).toBe(1);
+  });
+
+  it('refreshToken 失败调用 tokenFailureHandler', async () => {
+    let failureCalled: any = null;
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth({
+        refreshToken: async () => { throw new Error('refresh failed'); },
+        tokenFailureHandler: (reason, err) => { failureCalled = { reason, msg: err?.message }; },
+      }),
+    });
+
+    await instance.get('/test', null, {
+      adapter: () => Promise.reject({
+        config: {}, isAxiosError: true, message: 'Unauthorized',
+        response: { status: 401, data: {} },
+      }),
+    }).catch(() => {});
+
+    expect(failureCalled.reason).toBe('refresh');
+    expect(failureCalled.msg).toBe('refresh failed');
+  });
+
+  it('headerFormat 字符串模板', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth({ headerFormat: 'Token {token}' }),
+    });
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders.Authorization).toBe('Token access-xxx');
+  });
+
+  it('headerFormat 函数', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth({ headerFormat: (t: string) => `JWT ${t}` }),
+    });
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders.Authorization).toBe('JWT access-xxx');
+  });
+
+  it('tokenAuth 未配置时不影响正常请求', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders.Authorization).toBeUndefined();
+  });
+
+  it('needToken 函数动态判断', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth(),
+      needToken: (config: any) => config.url?.startsWith('/api'),
+    });
+    // /test 不以 /api 开头 → 不加 token
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders.Authorization).toBeUndefined();
+  });
 });
