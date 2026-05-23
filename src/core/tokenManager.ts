@@ -1,19 +1,13 @@
 /**
  * TokenManager — Token 认证管理
  *
- * 负责：注入 header、检测过期、排队刷新、失败处理
- *
- * 三个公开方法对应拦截器调用点：
- *   handleRequest(config)   — 请求拦截器步骤 1.5
- *   handleResponse(response) — 响应拦截器 resolve 分支
- *   handleError(error)       — 响应拦截器 reject 分支
+ * 请求拦截器：注入 header，排队等待刷新
+ * 响应拦截器：检测过期，触发刷新，返回 true 通知调用方重试
  */
 
 import type { AxiosRequestConfig } from 'axios';
 import type { TokenInfo, TokenAuthConfig } from '../types';
 
-// ════════════════════════════════════════════════════════════════════════════════
-// 工具函数
 // ════════════════════════════════════════════════════════════════════════════════
 
 export function formatHeader(token: string, fmt?: string | ((t: string) => string)): string {
@@ -25,22 +19,18 @@ export function formatHeader(token: string, fmt?: string | ((t: string) => strin
   return `Bearer ${token}`;
 }
 
-function setAuthHeader(
-  config: AxiosRequestConfig,
-  token: string,
-  auth: TokenAuthConfig,
-): void {
+function setHeader(config: AxiosRequestConfig, token: string, auth: TokenAuthConfig): void {
   config.headers = config.headers || {};
   config.headers[auth.headerName || 'Authorization'] = formatHeader(token, auth.headerFormat);
 }
 
-function resolveNeedToken(
+function shouldUseToken(
   config: AxiosRequestConfig,
-  needTokenDefault: boolean | ((c: AxiosRequestConfig) => boolean) | undefined,
+  instanceNeedToken: boolean | ((c: AxiosRequestConfig) => boolean) | undefined,
 ): boolean {
   if (config.needToken !== undefined) return config.needToken;
-  if (typeof needTokenDefault === 'function') return needTokenDefault(config);
-  if (needTokenDefault !== undefined) return needTokenDefault;
+  if (typeof instanceNeedToken === 'function') return instanceNeedToken(config);
+  if (instanceNeedToken !== undefined) return instanceNeedToken;
   return true;
 }
 
@@ -48,12 +38,6 @@ function defaultShouldRefresh(err: any): boolean {
   return err?.response?.status === 401 || err?.response?.data?.code === 401;
 }
 
-function defaultTokenFailure(reason: string, error?: any): void {
-  console.warn(`[enhance-axios] Token ${reason} failed`, error);
-}
-
-// ════════════════════════════════════════════════════════════════════════════════
-// TokenManager
 // ════════════════════════════════════════════════════════════════════════════════
 
 export class TokenManager {
@@ -61,68 +45,61 @@ export class TokenManager {
 
   constructor(
     private auth: TokenAuthConfig,
-    private needToken: boolean | ((c: AxiosRequestConfig) => boolean) | undefined,
+    private needTokenDefault: boolean | ((c: AxiosRequestConfig) => boolean) | undefined,
   ) {}
 
-  // ─── 请求拦截器 ───
-
+  /** 请求拦截器：注入 token header */
   async handleRequest(config: AxiosRequestConfig): Promise<void> {
-    if (!resolveNeedToken(config, this.needToken)) return;
+    if (!shouldUseToken(config, this.needTokenDefault)) return;
 
     if (this.pendingRefresh) {
-      const newToken = await this.pendingRefresh;
-      setAuthHeader(config, newToken.accessToken, this.auth);
+      const info = await this.pendingRefresh;
+      setHeader(config, info.accessToken, this.auth);
       return;
     }
 
     const local = await Promise.resolve(this.auth.getLocalToken());
     if (local) {
-      setAuthHeader(config, local.accessToken, this.auth);
+      setHeader(config, local.accessToken, this.auth);
     }
   }
 
-  // ─── 响应拦截器 resolve ───
+  /**
+   * 响应拦截器（resolve / reject）：
+   * 检测到 token 过期则刷新并注入新 token。
+   * 返回 true 表示调用方需要调用 instance.request(config) 重试。
+   * 抛出异常表示刷新失败，调用方应 reject。
+   */
+  async handleAuthError(responseOrError: any, config: AxiosRequestConfig): Promise<boolean> {
+    if (!shouldUseToken(config, this.needTokenDefault)) return false;
 
-  async handleResponse(response: any, config: AxiosRequestConfig): Promise<any> {
-    if (!resolveNeedToken(config, this.needToken)) return null;
+    const check = this.auth.shouldRefreshToken || defaultShouldRefresh;
+    if (!check(responseOrError)) return false;
 
-    const shouldRefresh = this.auth.shouldRefreshToken || defaultShouldRefresh;
-    if (!shouldRefresh(response)) return null;
-
-    return this.refreshAndRetry(config);
-  }
-
-  // ─── 响应拦截器 reject ───
-
-  async handleError(error: any, config: AxiosRequestConfig): Promise<any> {
-    if (!resolveNeedToken(config, this.needToken)) return null;
-
-    const shouldRefresh = this.auth.shouldRefreshToken || defaultShouldRefresh;
-    if (!shouldRefresh(error)) return null;
-
-    return this.refreshAndRetry(config);
-  }
-
-  // ─── 内部 ───
-
-  private async refreshAndRetry(config: AxiosRequestConfig): Promise<any> {
-    try {
-      if (!this.pendingRefresh) {
-        this.pendingRefresh = this.auth.refreshToken().then((info) => {
+    if (!this.pendingRefresh) {
+      this.pendingRefresh = this.auth.refreshToken()
+        .then((info) => {
           if (this.auth.setLocalToken) {
             Promise.resolve(this.auth.setLocalToken(info)).catch(() => {});
           }
           return info;
         });
-      }
-      const newToken = await this.pendingRefresh;
-      this.pendingRefresh = null;
-      setAuthHeader(config, newToken.accessToken, this.auth);
-      return { retry: true, config };
-    } catch (err) {
-      this.pendingRefresh = null;
-      (this.auth.tokenFailureHandler || defaultTokenFailure)('refresh', err);
-      throw err;
     }
+
+    const info = await this.pendingRefresh;
+    this.pendingRefresh = null;
+    setHeader(config, info.accessToken, this.auth);
+
+    // 重试前清除旧的 requestManager 注册，避免步骤 4 防重复拦截
+    if ((config as any).__controller) {
+      try { (config as any).__controller.abort(); } catch { /* noop */ }
+    }
+
+    return true;
+  }
+
+  /** 刷新失败时调用 */
+  clearPendingRefresh(): void {
+    this.pendingRefresh = null;
   }
 }

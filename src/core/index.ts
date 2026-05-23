@@ -717,8 +717,16 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
 
       // Token 刷新（resolve 分支）
       if (tokenManager) {
-        const retryResult = await tokenManager.handleResponse(response, config);
-        if (retryResult) return instance.request(retryResult.config);
+        try {
+          if (await tokenManager.handleAuthError(response, config)) {
+            cleanupRegistered(config, requestManager);
+            return instance.request(config);
+          }
+        } catch (err) {
+          tokenManager.clearPendingRefresh();
+          rejectAndCleanup(config, requestManager, pendingReturns, err);
+          return Promise.reject(err);
+        }
       }
 
       // ─────────────────────────────────────────────────────────────────────
@@ -767,9 +775,13 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       // Token 刷新（reject 分支，在 retry 之前）
       if (tokenManager) {
         try {
-          const retryResult = await tokenManager.handleError(error, config);
-          if (retryResult) return instance.request(retryResult.config);
+          if (await tokenManager.handleAuthError(error, config)) {
+            cleanupRegistered(config, requestManager);
+            return instance.request(config);
+          }
         } catch (err) {
+          tokenManager.clearPendingRefresh();
+          rejectAndCleanup(config, requestManager, pendingReturns, err);
           return Promise.reject(err);
         }
       }
