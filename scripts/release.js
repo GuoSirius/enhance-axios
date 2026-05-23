@@ -51,20 +51,28 @@ function selectVersion(current, choices) {
     process.stdin.setRawMode(true);
 
     let selected = 0;
+    let rendered = false;
+    const LINES = 6; // total lines output by render
 
     function render() {
-      readline.cursorTo(process.stdout, 0);
-      readline.moveCursor(process.stdout, 0, -4);
-      readline.clearScreenDown(process.stdout);
+      if (rendered) {
+        // Move cursor up to overwrite previous render
+        process.stdout.write(`\x1b[${LINES}A\x1b[J`);
+      }
+      rendered = true;
 
-      console.log(`  Current: ${current}\n`);
-      choices.forEach((c, i) => {
-        const arrow = i === selected ? '❯' : ' ';
-        const highlight = i === selected ? '\x1b[36m' : '\x1b[2m';
-        const reset = '\x1b[0m';
-        console.log(`  ${arrow} ${highlight}${c.label.padEnd(7)} → ${c.preview}${reset}`);
-      });
-      console.log('\n  ↑↓ move  ↵ confirm');
+      const lines = [
+        `  Current: ${current}`,
+        '',
+        ...choices.map((c, i) => {
+          const arrow = i === selected ? '❯' : ' ';
+          const color = i === selected ? '\x1b[36m' : '\x1b[2m';
+          return `  ${arrow} ${color}${c.label.padEnd(7)} → ${c.preview}\x1b[0m`;
+        }),
+        '',
+        '  ↑↓ move  ↵ confirm',
+      ];
+      process.stdout.write(lines.join('\n') + '\n');
     }
 
     render();
