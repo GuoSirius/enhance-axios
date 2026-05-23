@@ -110,19 +110,19 @@ import type {
   EnhanceInstance,
   PreventDuplicateConfig,
   CancelRequestConfig,
-  RetryConfig,
   PreventDuplicateOption,
   CancelRequestOption,
-  RetryOption,
   InternalPreventConfig,
   InternalCancelConfig,
-  InternalRetryConfig,
   RequestMethod,
 } from '../types';
 import { CONTENT_TYPE_MAP } from '../types';
-import type { TokenInfo, TokenAuthConfig } from '../types';
 import { TokenManager } from './tokenManager';
 import { getDataFormat, injectDataTransform } from './dataTransform';
+import { defaultRetryCondition, DEFAULT_RETRY_CONFIG, calculateRetryDelay, normalizeRetryConfig } from './retry';
+import { shouldApply, isConfigSet } from './helpers';
+
+export { defaultRetryCondition };
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 存储防重复请求的延迟 Promise
@@ -162,87 +162,9 @@ const DEFAULT_CANCEL_CONFIG: InternalCancelConfig = {
   methods: ['GET'],
 };
 
-/**
- * 默认重试条件（可导出复用）
- *
- * - 网络错误 / CORS 等（无 response）→ 重试
- * - 408 Request Timeout → 重试
- * - 429 Too Many Requests → 重试
- * - 5xx 服务器错误 → 重试
- * - 其他（4xx 等）→ 不重试
- */
-export function defaultRetryCondition(error: AxiosError): boolean {
-  if (!error.response) {
-    return true;
-  }
-  const status = error.response.status;
-  if (status === 408 || status === 429) {
-    return true;
-  }
-  if (status >= 500 && status < 600) {
-    return true;
-  }
-  return false;
-}
-
-/**
- * 默认重试配置
- */
-const DEFAULT_RETRY_CONFIG: InternalRetryConfig = {
-  enabled: true,
-  retries: 3,
-  retryDelay: 1000,
-  retryCondition: defaultRetryCondition,
-  exponential: true,
-  maxDelay: 30000,
-};
-
-// ════════════════════════════════════════════════════════════════════════════════
-// 工具函数
-// ════════════════════════════════════════════════════════════════════════════════
-
-/**
- * 检查 HTTP 方法是否在允许列表中
- */
-function shouldApply(method?: string, methods?: string[] | null): boolean {
-  if (methods == null) return true;
-  if (methods.length === 0) return false;
-  return methods.includes(method?.toUpperCase() || 'GET');
-}
-
-/**
- * 计算重试延迟（支持指数退避）
- *
- * @param retryConfig 重试配置
- * @param retryCount 当前重试次数（从 0 开始）
- * @returns 延迟时间(ms)
- *
- * 指数退避公式：min(retryDelay * 2^retryCount, maxDelay)
- */
-function calculateRetryDelay(
-  retryConfig: { retryDelay: number; exponential: boolean; maxDelay: number },
-  retryCount: number
-): number {
-  let delay = retryConfig.retryDelay;
-  if (retryConfig.exponential) {
-    delay = Math.min(
-      retryConfig.retryDelay * Math.pow(2, retryCount),
-      retryConfig.maxDelay
-    );
-  }
-  return delay;
-}
-
 // ════════════════════════════════════════════════════════════════════════════════
 // 配置归一化函数
 // ════════════════════════════════════════════════════════════════════════════════
-
-/**
- * 判断配置是否已设置（不是 undefined/null）
- */
-function isConfigSet(config: any): boolean {
-  return config != null;
-}
 
 /**
  * 配置归一化：防重复提交
@@ -335,65 +257,6 @@ function normalizeCancelConfig(
     requestKey: (config as CancelRequestConfig).requestKey ?? defaults.requestKey,
     methods: (config as CancelRequestConfig).methods != null
       ? (config as CancelRequestConfig).methods
-      : defaults.methods,
-  };
-}
-
-/**
- * 配置归一化：失败重试
- *
- * 支持的输入格式：
- * - boolean: 赋给 enabled
- * - number: 赋给 retries
- * - number[]: 生成 retryCondition（匹配数组中状态码或网络错误）
- * - function: 赋给 retryCondition
- * - object: 合并到配置
- * - undefined/null: 视为未传递，使用默认值
- *
- * 注意：非对象类型的快捷方式默认开启该功能（enabled: true），
- * 仅 retry: false 时明确关闭。
- */
-function normalizeRetryConfig(
-  config: RetryOption | undefined,
-  defaults: InternalRetryConfig
-): InternalRetryConfig {
-  if (!isConfigSet(config)) {
-    return defaults;
-  }
-
-  if (typeof config === 'boolean') {
-    return { ...defaults, enabled: config };
-  }
-
-  if (typeof config === 'number') {
-    return { ...defaults, enabled: true, retries: config };
-  }
-
-  if (typeof config === 'function') {
-    return { ...defaults, enabled: true, retryCondition: config as (error: AxiosError) => boolean };
-  }
-
-  if (Array.isArray(config)) {
-    const codes = config as number[];
-    return {
-      ...defaults,
-      enabled: true,
-      retryCondition: (error: AxiosError) => {
-        if (!error.response) return true;
-        return codes.includes(error.response.status);
-      },
-    };
-  }
-
-  return {
-    enabled: (config as RetryConfig).enabled ?? true,
-    retries: (config as RetryConfig).retries ?? defaults.retries,
-    retryDelay: (config as RetryConfig).retryDelay ?? defaults.retryDelay,
-    retryCondition: (config as RetryConfig).retryCondition ?? defaults.retryCondition,
-    exponential: (config as RetryConfig).exponential ?? defaults.exponential,
-    maxDelay: (config as RetryConfig).maxDelay ?? defaults.maxDelay,
-    methods: (config as RetryConfig).methods != null
-      ? (config as RetryConfig).methods
       : defaults.methods,
   };
 }
