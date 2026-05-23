@@ -103,6 +103,9 @@ export class TokenManager {
   /** 刷新失败时调用 */
   handleRefreshFailure(err: any): void {
     this.pendingRefresh = null;
-    (this.auth.tokenFailureHandler || defaultTokenFailure)('refresh', err);
+    const handler = this.auth.tokenFailureHandler;
+    if (handler) {
+      handler('refresh', err);
+    }
   }
 }
