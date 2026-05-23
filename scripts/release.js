@@ -114,7 +114,7 @@ async function main() {
   }
 
   try {
-    run('npx vitest run');
+    run('node --max-old-space-size=4096 ./node_modules/.bin/vitest run --pool=forks');
   } catch {
     console.error('\n✗ Tests failed. Fix errors before releasing.');
     process.exit(1);
