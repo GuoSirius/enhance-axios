@@ -317,6 +317,7 @@ api.enhance.requestManager.getPendingKeys();
 ```ts
 import {
   createEnhanceInstance,
+  defaultRetryCondition,
   getFormData,
   hash,
   version,

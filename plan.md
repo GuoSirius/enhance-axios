@@ -25,7 +25,7 @@ enhance-axios/
 │   ├── axios-shim.ts             # UMD 构建 axios shim
 │   └── version.ts                # 自动生成的版本号
 ├── tests/
-│   └── index.test.ts             # 测试文件 (81 tests)
+│   └── index.test.ts             # 测试文件 (83 tests)
 ├── example/
 │   ├── index.html                 # 测试页面 (10 项测试)
 │   ├── server.js                  # Mock Server
@@ -77,9 +77,9 @@ enhance-axios/
 
 ### 5. 缓存破坏 (needCache)
 - 所有方法自动追加 `_` 参数（时间戳）
-- key 生成后添加，不影响防重复/取消请求
+- key 生成时自动剔除 `_`，重试/防重复不受影响
 - `__cacheBustInjected` 标记防重入
-- 默认 true，可实例级或请求级关闭
+- 默认 true，仅 `needCache: false` 关闭
 
 ### 6. 配置归一化
 - 对象默认 `enabled: ?? true`（传入即 opt-in）
@@ -168,7 +168,7 @@ interface RetryConfig {
 ## 验证方式
 
 1. `npm run typecheck` — TypeScript 类型检查
-2. `npm run test` — 测试 (81 tests)
+2. `npm run test` — 测试 (83 tests)
 3. `npm run build` — 构建
 4. `npm run example` — 启动 Mock Server
 5. 浏览器打开 `http://localhost:3000`

@@ -60,13 +60,16 @@ export function resolveTemplate(template: string, config: AxiosRequestConfig): s
 
 /**
  * 生成默认的 requestKey（method + url + params + data 的排序哈希）
+ *
+ * 自动剔除 params 和 data 中的 _ 字段（缓存破坏参数），
+ * 避免重试时 key 不一致导致 deferred 链断裂。
  */
 export function generateDefaultKey(config: AxiosRequestConfig): string {
   const parts = [
     config.method?.toUpperCase() || 'GET',
     config.url || '',
-    config.params != null ? JSON.stringify(sortObject(toPlain(config.params))) : '',
-    config.data != null ? JSON.stringify(sortObject(toPlain(config.data))) : '',
+    config.params != null ? JSON.stringify(sortObject(stripCacheParam(toPlain(config.params)))) : '',
+    config.data != null ? JSON.stringify(sortObject(stripCacheParam(toPlain(config.data)))) : '',
   ];
   return hash(parts.join('|'));
 }
@@ -111,6 +114,17 @@ export function resolveRequestKey(
 // ════════════════════════════════════════════════════════════════════════════════
 // 内部函数
 // ════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 剔除对象中的 _ 字段（缓存破坏参数，不应参与 key 生成）
+ */
+function stripCacheParam(obj: unknown): unknown {
+  if (obj == null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj;
+  if (!isPlainObject(obj)) return obj;
+  const { _, ...rest } = obj as Record<string, unknown>;
+  return rest;
+}
 
 /**
  * 对对象键进行递归排序（保证相同数据产生相同哈希）

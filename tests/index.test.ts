@@ -785,3 +785,84 @@ describe('防重复 + 重试交互', () => {
     // callCount 可能是 2（1次失败+1次成功），但只有1个真正的请求被注册
   }, 10000);
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// key 生成：_ 参数剔除
+// ═══════════════════════════════════════════════════════════════════
+
+describe('key 生成剔除 _ 参数', () => {
+  it('params 中有 _ 不影响默认 key', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+    });
+
+    let callCount = 0;
+    const adapter = (config: any) => {
+      callCount++;
+      return new Promise(resolve => setTimeout(() => resolve({
+        data: { code: 0, data: {} },
+        status: 200, statusText: 'OK', headers: {}, config,
+      }), 100));
+    };
+
+    // 使用 POST（默认仅防重复，不取消），并发发送
+    const [r1, r2] = await Promise.allSettled([
+      instance.post('/submit', { q: 'test' }, {
+        adapter, preventDuplicate: { intervalMs: 5000 },
+      }),
+      (async () => {
+        await new Promise(r => setTimeout(r, 5));
+        return instance.post('/submit', { q: 'test', _: 'cache-bust' }, {
+          adapter, preventDuplicate: { intervalMs: 5000 },
+        });
+      })(),
+    ]);
+
+    expect(r1.status).toBe('fulfilled');
+    expect(r2.status).toBe('fulfilled');
+    expect(callCount).toBe(1);
+  });
+
+  it('重试时 _ 不改变 key，deferred 链不断', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      retry: { retries: 1, retryDelay: 10, exponential: false },
+    });
+
+    let callCount = 0;
+    const results: any[] = [];
+
+    // 发两个并发请求，第二个会被防重复拦截
+    const makeRequest = (id: number) => {
+      return instance.post('/test', { id }, {
+        adapter: (config: any) => {
+          callCount++;
+          if (callCount === 1) {
+            return Promise.reject({
+              config, isAxiosError: true, message: 'fail',
+              response: { status: 500, data: {} },
+            });
+          }
+          return Promise.resolve({
+            data: { code: 0, data: { id, callCount } },
+            status: 200, statusText: 'OK', headers: {}, config,
+          });
+        },
+        preventDuplicate: { intervalMs: 5000 },
+      });
+    };
+
+    const [r1, r2] = await Promise.allSettled([
+      makeRequest(1),
+      // 第二个请求在很短间隔后发出，needCache 给 params 加了 _
+      // 但 stripCacheParam 剔除了 _ → key 不变 → 防重复拦截 → 复用 deferred
+      (async () => {
+        await new Promise(r => setTimeout(r, 5));
+        return makeRequest(2);
+      })(),
+    ]);
+
+    expect(r1.status).toBe('fulfilled');
+    expect(r2.status).toBe('fulfilled');
+  }, 10000);
+});
