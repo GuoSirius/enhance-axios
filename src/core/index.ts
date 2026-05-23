@@ -25,7 +25,7 @@
  *  缓存破坏| 是      | 全部                             | N/A
  *
  * 防重复和取消请求通过 methods 各自控制生效范围，默认互不重叠。
- * 同一请求同时命中两者时：步骤 3（取消旧请求）→ 步骤 4（防重复检查）→ 步骤 5（注册）。
+ * 同一请求同时命中两者时：步骤 4（取消旧请求）→ 步骤 5（防重复检查）→ 步骤 6（注册）。
  *
  * ════════════════════════════════════════════════════════════════════════════════
  *                              配置规则
@@ -42,12 +42,13 @@
  * ════════════════════════════════════════════════════════════════════════════════
  *
  *  步骤 1 — 获取有效配置           请求级 > 实例级
- *  步骤 2 — Content-Type 处理      默认 json，file 不设（浏览器自动 boundary）
- *  步骤 3 — 取消旧请求             同 cancelKey 的旧请求被 abort
- *  步骤 4 — 防重复检查             同 preventKey 且在 intervalMs 内 → 阻止，返回 deferred.promise
- *  步骤 5 — 注册新请求             AbortController + requestManager 双 Map 注册
- *  步骤 6 — 数据转换注入           file/form → transformRequest（json 由 axios 处理）
- *  步骤 7 — 缓存破坏               追加 _=<timestamp> 到 params（key 生成后，不影响防重复）
+ *  步骤 2 — Token 注入              tokenAuth 检测、注入 header、排队刷新
+ *  步骤 3 — Content-Type 处理      默认 json，file 不设（浏览器自动 boundary）
+ *  步骤 4 — 取消旧请求             同 cancelKey 的旧请求被 abort
+ *  步骤 5 — 防重复检查             同 preventKey 且在 intervalMs 内 → 阻止，返回 deferred.promise
+ *  步骤 6 — 注册新请求             AbortController + requestManager 双 Map 注册
+ *  步骤 7 — 数据转换注入           file/form → transformRequest（json 由 axios 处理）
+ *  步骤 8 — 缓存破坏               追加 _=<timestamp> 到 params（key 生成后，不影响防重复）
  *
  * ════════════════════════════════════════════════════════════════════════════════
  *                              响应拦截器流程
@@ -424,12 +425,12 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       const { prevent, cancel } = getEffectiveConfig(config, { prevent: defaultPrevent, cancel: defaultCancel });
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 1.5：Token 注入
+      // 步骤 2：Token 注入
       // ─────────────────────────────────────────────────────────────────────
       if (tokenManager) await tokenManager.handleRequest(config);
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 2：处理 Content-Type
+      // 步骤 3：处理 Content-Type
       // ─────────────────────────────────────────────────────────────────────
       // 仅在未显式设置 Content-Type 时处理（大小写不敏感）
       // 'json' → application/json;charset=UTF-8（默认）
@@ -453,7 +454,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 3：取消旧请求（同 key 的旧请求被中止）
+      // 步骤 4：取消旧请求（同 key 的旧请求被中止）
       // ─────────────────────────────────────────────────────────────────────
       if (cancel.enabled && shouldApply(method, cancel.methods)) {
         const key = resolveRequestKey(config, cancel.requestKey);
@@ -467,7 +468,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 4：防重复检查（同 key 且在 intervalMs 内则阻止当前请求）
+      // 步骤 5：防重复检查（同 key 且在 intervalMs 内则阻止当前请求）
       // ─────────────────────────────────────────────────────────────────────
       if (prevent.enabled && shouldApply(method, prevent.methods)) {
         const key = resolveRequestKey(config, prevent.requestKey);
@@ -502,7 +503,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 5：注册新请求（创建 AbortController 供后续 cancel/prevent 使用）
+      // 步骤 6：注册新请求（创建 AbortController 供后续 cancel/prevent 使用）
       // ─────────────────────────────────────────────────────────────────────
       const needsPrevent = prevent.enabled && shouldApply(method, prevent.methods);
       const needsCancel = cancel.enabled && shouldApply(method, cancel.methods);
@@ -539,7 +540,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 6：注入数据转换（file/form → transformRequest，json 由 axios 默认处理）
+      // 步骤 7：注入数据转换（file/form → transformRequest，json 由 axios 默认处理）
       // ─────────────────────────────────────────────────────────────────────
       const format = getDataFormat(config);
       if (format === 'file' || format === 'form') {
@@ -547,7 +548,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 7：缓存破坏（追加 _ 参数，key 生成后执行，stripCacheParam 自动剔除不影响 key）
+      // 步骤 8：缓存破坏（追加 _ 参数，key 生成后执行，stripCacheParam 自动剔除不影响 key）
       // ─────────────────────────────────────────────────────────────────────
       if ((config.needCacheBust ?? needCacheBust) !== false) {
         const stamp = Date.now().toString(36);
