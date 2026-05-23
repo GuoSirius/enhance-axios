@@ -975,15 +975,17 @@ describe('Token 认证 (tokenAuth)', () => {
 
   it('401 触发 refresh 并重试成功', async () => {
     let refreshCount = 0;
+    let currentToken = { ...mockToken };
     const instance = createEnhanceInstance({
       baseURL: 'http://localhost',
       tokenAuth: createAuth({
-        refreshToken: async () => { refreshCount++; return mockNewToken; },
+        getLocalToken: () => currentToken,
+        refreshToken: async () => { refreshCount++; currentToken = { ...mockNewToken }; return currentToken; },
+        setLocalToken: (info) => { currentToken = info; },
       }),
     });
     const res = await instance.get('/test', null, {
       adapter: (config: any) => {
-        // 第一次返回 401，重试时返回成功
         if (config.headers.Authorization === 'Bearer access-xxx') {
           return Promise.reject({
             config, isAxiosError: true, message: 'Unauthorized',
@@ -999,14 +1001,15 @@ describe('Token 认证 (tokenAuth)', () => {
 
   it('并发 401 只刷新一次', async () => {
     let refreshCount = 0;
+    let currentToken = { ...mockToken };
     const instance = createEnhanceInstance({
       baseURL: 'http://localhost',
       tokenAuth: createAuth({
-        refreshToken: async () => { refreshCount++; return mockNewToken; },
+        getLocalToken: () => currentToken,
+        refreshToken: async () => { refreshCount++; currentToken = { ...mockNewToken }; return currentToken; },
       }),
     });
 
-    // 三个请求同时触发 401
     const makeReq = () => instance.get('/test', null, {
       adapter: (config: any) => {
         if (config.headers.Authorization === 'Bearer access-xxx') {

@@ -86,9 +86,9 @@ export class TokenManager {
 
     if (!this.pendingRefresh) {
       this.pendingRefresh = this.auth.refreshToken()
-        .then((info) => {
+        .then(async (info) => {
           if (this.auth.setLocalToken) {
-            Promise.resolve(this.auth.setLocalToken(info)).catch(() => {});
+            await Promise.resolve(this.auth.setLocalToken(info)).catch(() => {});
           }
           return info;
         });
