@@ -56,10 +56,10 @@ async function main() {
     process.exit(1);
   }
 
-  const testOutput = runSilent('npx vitest run');
-  if (!/Tests\s+\d+\s+passed/.test(testOutput) || /Tests\s+\d+\s+failed/.test(testOutput)) {
+  try {
+    run('npx vitest run');
+  } catch {
     console.error('\n✗ Tests failed. Fix errors before releasing.');
-    console.error(testOutput.split('\n').slice(-20).join('\n'));
     process.exit(1);
   }
   console.log('✓ Typecheck and tests passed.\n');

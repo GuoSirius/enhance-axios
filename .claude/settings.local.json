@@ -58,7 +58,9 @@
       "Bash(npx eslint *)",
       "Bash(mv eslint.config.js eslint.config.mjs)",
       "Bash(node scripts/release.js)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node -e \"const {execSync}=require\\('child_process'\\); const out=execSync\\('npx vitest run', {encoding:'utf8', stdio:'pipe', shell:true}\\); console.log\\('CAPTURED:', JSON.stringify\\(out.split\\('\\\\n'\\).filter\\(l=>l.includes\\('Tests'\\)\\)\\)\\)\")",
+      "Bash(node *)"
     ]
   }
 }
