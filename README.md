@@ -97,7 +97,7 @@ api.post('/data', body, { contentType: 'text/plain' });
 - `'form'` → `new URLSearchParams(data)` 转查询字符串
 - 已是 FormData / URLSearchParams / 字符串 → 不做转换
 
-### 缓存破坏 (cacheBusting)
+### 缓存破坏 (needCache)
 
 所有请求默认自动在 params 中添加 `_` 参数（时间戳），防止浏览器或代理缓存。参数在 requestKey 生成之后添加，不影响防重复/取消请求的 key 匹配。
 
@@ -107,10 +107,10 @@ api.get('/data');   // → /data?_=lq8x3f
 api.post('/submit', { name: 'test' });  // → /submit?_=lq8x3f
 
 // 关闭（实例级）
-const api = createEnhanceInstance({ baseURL: '/api', cacheBusting: false });
+const api = createEnhanceInstance({ baseURL: '/api', needCache: false });
 
 // 关闭（请求级）
-api.get('/data', null, { cacheBusting: false });
+api.get('/data', null, { needCache: false });
 ```
 
 ### 3. 失败重试 (retry)
@@ -226,7 +226,7 @@ const api = createEnhanceInstance({
   timeout: 10000,
 
   // 缓存破坏（默认开启，GET/HEAD/OPTIONS 自动加 _ 参数）
-  cacheBusting: true,
+  needCache: true,
 
   preventDuplicate: {
     enabled: true,

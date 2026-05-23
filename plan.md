@@ -75,7 +75,7 @@ enhance-axios/
 - `form` → URLSearchParams
 - `__dataTransformInjected` 标记防重入
 
-### 5. 缓存破坏 (cacheBusting)
+### 5. 缓存破坏 (needCache)
 - 所有方法自动追加 `_` 参数（时间戳）
 - key 生成后添加，不影响防重复/取消请求
 - `__cacheBustInjected` 标记防重入

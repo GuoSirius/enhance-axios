@@ -2,116 +2,104 @@
  * enhance-axios 核心模块
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           功能说明
+ *                              功能说明
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * 三个核心增强：
- * 1. 防重复提交 (preventDuplicate)：阻止短时间内重复发送相同请求，返回已有请求的结果
- * 2. 取消请求 (cancelRequest)：    取消正在进行的相同请求，保留最新请求
- * 3. 失败重试 (retry)：             请求失败（含 2xx 业务码异常）时自动重试
+ * 五个增强能力：
+ *  1. 防重复提交 (preventDuplicate) — 短时间内相同请求复用第一次的结果
+ *  2. 取消请求   (cancelRequest)    — 新请求到达时取消旧请求，始终保留最新
+ *  3. 失败重试   (retry)            — HTTP 错误或业务码异常时自动重试
+ *  4. 数据转换   (contentType)      — 根据 Content-Type 自动转换 data 格式
+ *  5. 缓存破坏   (needCache)        — 所有请求追加 _ 参数防止缓存
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           默认策略
+ *                              默认策略
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * - 防重复：methods 默认 ['POST', 'PUT', 'PATCH', 'DELETE']
- * - 取消请求：methods 默认 ['GET']
- * - 重试：    methods 默认 undefined（所有方法）
+ *  功能     | 默认启用 | 默认 methods                     | 默认 key 生成
+ *  --------|---------|----------------------------------|------------------
+ *  防重复   | 是      | POST, PUT, PATCH, DELETE         | hash(method|url|params|data)
+ *  取消请求| 是      | GET                              | 同上
+ *  重试     | 是      | 全部                             | N/A
+ *  数据转换| 是      | N/A (有 data 的请求)             | N/A
+ *  缓存破坏| 是      | 全部                             | N/A
  *
- * 三者通过 methods 数组各自控制生效范围，默认互不重叠。
- * 如同时启用防重复和取消请求：防重复优先（先检查取消 → 再检查防重复 → 注册）。
- *
- * ════════════════════════════════════════════════════════════════════════════════
- *                           配置规则
- * ════════════════════════════════════════════════════════════════════════════════
- *
- * 1. 请求级配置优先于实例级配置
- * 2. 非 false 快捷方式（string/function/number/array）暗含 enabled: true
- * 3. 空数组 methods: [] 表示不应用于任何方法
- * 4. methods: undefined / null 表示应用于所有方法
+ * 防重复和取消请求通过 methods 各自控制生效范围，默认互不重叠。
+ * 同一请求同时命中两者时：步骤 3（取消旧请求）→ 步骤 4（防重复检查）→ 步骤 5（注册）。
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           请求拦截器 (5 步)
+ *                              配置规则
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * 步骤 1：获取有效配置（请求级 > 实例级）
- * 步骤 2：Content-Type 处理（默认 json，file 不设置）
- * 步骤 3：取消旧请求（同 cancelKey 的请求被中止）
- * 步骤 4：防重复检查（同 preventKey 且在 intervalMs 内则阻止并返回 deferred.promise）
- * 步骤 5：注册新请求（创建 AbortController，注册到 requestManager）
- * 步骤 5.5：注入数据转换（file/form → transformRequest，__dataTransformInjected 防重入）
- * 步骤 5.6：缓存破坏（所有请求加 _ 参数，__cacheBustInjected 防重入）
+ *  1. 请求级配置覆盖实例级配置
+ *  2. 请求级传入 object 默认 enabled: true（显式 opt-in）
+ *  3. 快捷写法（string/function/number/array）暗含 enabled: true
+ *  4. needCache 仅 false 关闭，其他值一律视为 true
+ *  5. methods: undefined / null → 全部方法，methods: [] → 不应用
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           响应拦截器
+ *                              请求拦截器流程
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * 成功 (2xx):
- *   1. 检测业务码重试 (__bizRetry flag)
+ *  步骤 1 — 获取有效配置           请求级 > 实例级
+ *  步骤 2 — Content-Type 处理      默认 json，file 不设（浏览器自动 boundary）
+ *  步骤 3 — 取消旧请求             同 cancelKey 的旧请求被 abort
+ *  步骤 4 — 防重复检查             同 preventKey 且在 intervalMs 内 → 阻止，返回 deferred.promise
+ *  步骤 5 — 注册新请求             AbortController + requestManager 双 Map 注册
+ *  步骤 6 — 数据转换注入           file/form → transformRequest（json 由 axios 处理）
+ *  步骤 7 — 缓存破坏               追加 _=<timestamp> 到 params（key 生成后，不影响防重复）
+ *
+ * ════════════════════════════════════════════════════════════════════════════════
+ *                              响应拦截器流程
+ * ════════════════════════════════════════════════════════════════════════════════
+ *
+ *  成功 (2xx):
+ *   1. 业务码重试检测（retryCondition 在 success handler 中直接判断）
  *   2. resolve deferred → 清理 pendingReturns + requestManager
  *
- * 错误 (非 2xx / 网络错误 / 取消):
- *   情况 1 — 防重复拦截：返回原请求的 deferred.promise（不清理）
- *   情况 2 — 请求被取消：  reject deferred，清理，抛出
- *   情况 3 — 满足重试条件：保留 deferred，清理 requestManager，延迟后重新发起
- *   情况 4 — 不满足/耗尽：  reject deferred，清理，抛出
+ *  错误 (非 2xx / 网络错误 / 取消):
+ *   情况 1 ─ 防重复拦截       → 返回 deferred.promise（不清理，等待者拿原请求结果）
+ *   情况 2 ─ 请求被取消       → reject deferred → 清理 → 抛出
+ *   情况 3 ─ 满足重试条件     → 保留 deferred → 清理 requestManager → 延迟后重试
+ *   情况 4 ─ 不满足/重试耗尽  → reject deferred → 清理 → 抛出
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           pendingReturns vs requestManager
+ *                           deferred 机制
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * pendingReturns:   Map<string, PendingDeferred>
- *   ─ 存储 deferred（promise + resolve/reject），供防重复等待者复用结果
- *   ─ 请求 A 创建 deferred → 请求 B 被阻止时拿到 A 的 deferred.promise
- *   ─ 重试链复用同一个 deferred，保证等待者拿到最终结果而非中间失败
+ * pendingReturns: Map<key, { resolve, reject, promise }>
+ *   请求 A 创建 deferred — 请求 B 被拦截时拿到 A 的 deferred.promise
+ *   重试链复用同一个 deferred — 被拦截的请求拿到最终结果而非中间失败
  *
- * requestManager:   RequestManager 实例
- *   ─ 内部两个 Map：
- *     preventPending: Map<string, PendingRequest>  — 防重复注册
- *     cancelPending:  Map<string, PendingRequest>  — 取消注册
- *   ─ 每个 PendingRequest 存 { key, config, controller, promise, timestamp }
- *   ─ controller 用于 abort()，promise 指向 pendingReturns 中的 deferred.promise
+ * requestManager: { preventPending, cancelPending }
+ *   两个独立 Map，各自存 { key, config, controller, promise, timestamp }
+ *   controller 用于 abort()，promise 指向 pendingReturns 的 deferred.promise
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           enhance API（外部使用）
+ *                              清理时机
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * api.enhance.cancelRequest(key)
- *   ─ 取消 key 对应的请求（同时查两个 Map）
- *   ─ 内部调用 requestManager.cancelRequest(key) → controller.abort()
- *
- * api.enhance.getRequestStatus(key)
- *   ─ 返回 PendingRequest | undefined
- *   ─ 优先查 preventPending，其次 cancelPending
- *
- * api.enhance.clearAll()
- *   ─ reject 所有 deferred → 清空 pendingReturns → 清空 requestManager
+ *  操作              | pendingReturns | requestManager | deferred
+ *  ------------------|----------------|----------------|----------
+ *  成功 / 重试成功   | 删除           | 取消注册       | resolve
+ *  失败 / 重试耗尽   | 删除           | 取消注册       | reject
+ *  重试前            | 保留           | 取消注册       | 保留
+ *  防重复拦截        | -              | -              | -
+ *  请求被取消        | 删除           | 取消注册       | reject
+ *  clearAll()        | 全部删除       | 全部清空       | reject 全部
  *
  * ════════════════════════════════════════════════════════════════════════════════
- *                           重试场景分析
+ *                              重试场景
  * ════════════════════════════════════════════════════════════════════════════════
  *
- * | 场景                    | HTTP  | 重试 | 判断方式                        |
- * |-------------------------|-------|------|---------------------------------|
- * | 网络错误                | 无    | 是   | !error.response                 |
- * | 429 / 5xx               | >=500 | 是   | retryCondition                  |
- * | 4xx 客户端错误          | 400+  | 否   | 默认不重试                      |
- * | 请求取消                | -     | 否   | axios.isCancel()                |
- * | 防重复拦截              | -     | 否   | __preventReturn                 |
- * | 2xx 业务码异常          | 200   | 自定义| __bizRetry + retryCondition      |
- *
- * ════════════════════════════════════════════════════════════════════════════════
- *                           清理时机
- * ════════════════════════════════════════════════════════════════════════════════
- *
- * | 操作           | pendingReturns | requestManager | deferred     |
- * |----------------|----------------|----------------|--------------|
- * | 成功 / 重试成功 | 删除           | 取消注册       | resolve      |
- * | 失败 / 重试耗尽 | 删除           | 取消注册       | reject       |
- * | 重试前          | 保留           | 取消注册       | 保留         |
- * | 防重复拦截      | -              | -              | -            |
- * | 请求被取消      | 删除           | 取消注册       | reject       |
- * | clearAll()     | 全部删除       | 全部清空       | reject 全部  |
+ *  场景               | HTTP   | 重试 | 判断方式
+ *  -------------------|--------|------|------------------
+ *  网络错误            | 无     | 是   | !error.response
+ *  408 / 429 / 5xx    | >=400  | 是   | retryCondition
+ *  4xx 客户端错误      | 400+   | 否   | 默认不重试
+ *  请求取消            | -      | 否   | axios.isCancel()
+ *  防重复拦截          | -      | 否   | __preventReturn
+ *  2xx 业务码异常      | 200    | 自定义| success handler 中 retryCondition
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
@@ -172,28 +160,36 @@ const DEFAULT_CANCEL_CONFIG: InternalCancelConfig = {
 };
 
 /**
+ * 默认重试条件（可导出复用）
+ *
+ * - 网络错误 / CORS 等（无 response）→ 重试
+ * - 408 Request Timeout → 重试
+ * - 429 Too Many Requests → 重试
+ * - 5xx 服务器错误 → 重试
+ * - 其他（4xx 等）→ 不重试
+ */
+export function defaultRetryCondition(error: AxiosError): boolean {
+  if (!error.response) {
+    return true;
+  }
+  const status = error.response.status;
+  if (status === 408 || status === 429) {
+    return true;
+  }
+  if (status >= 500 && status < 600) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * 默认重试配置
  */
 const DEFAULT_RETRY_CONFIG: InternalRetryConfig = {
   enabled: true,
   retries: 3,
   retryDelay: 1000,
-  retryCondition: (error: AxiosError) => {
-    // 无响应（网络错误、CORS 等）：重试
-    if (!error.response) {
-      return true;
-    }
-    const status = error.response.status;
-    // 408 Request Timeout, 429 Too Many Requests
-    if (status === 408 || status === 429) {
-      return true;
-    }
-    // 5xx 服务器错误：重试
-    if (status >= 500 && status < 600) {
-      return true;
-    }
-    return false;
-  },
+  retryCondition: defaultRetryCondition,
   exponential: true,
   maxDelay: 30000,
 };
@@ -283,7 +279,7 @@ function injectDataTransform(
  * 判断配置是否已设置（不是 undefined/null）
  */
 function isConfigSet(config: any): boolean {
-  return config !== undefined && config !== null;
+  return config != null;
 }
 
 /**
@@ -329,14 +325,14 @@ function normalizePreventConfig(
 
   // array -> methods
   if (Array.isArray(config)) {
-    return { ...defaults, enabled: true, methods: config as string[] };
+    return { ...defaults, enabled: true, methods: [...(config as string[])] };
   }
 
   // object -> 合并
   return {
     enabled: (config as PreventDuplicateConfig).enabled ?? true,
     requestKey: (config as PreventDuplicateConfig).requestKey ?? defaults.requestKey,
-    methods: (config as PreventDuplicateConfig).methods !== undefined
+    methods: (config as PreventDuplicateConfig).methods != null
       ? (config as PreventDuplicateConfig).methods
       : defaults.methods,
     intervalMs: (config as PreventDuplicateConfig).intervalMs ?? defaults.intervalMs,
@@ -369,13 +365,13 @@ function normalizeCancelConfig(
   }
 
   if (Array.isArray(config)) {
-    return { ...defaults, enabled: true, methods: config as string[] };
+    return { ...defaults, enabled: true, methods: [...(config as string[])] };
   }
 
   return {
     enabled: (config as CancelRequestConfig).enabled ?? true,
     requestKey: (config as CancelRequestConfig).requestKey ?? defaults.requestKey,
-    methods: (config as CancelRequestConfig).methods !== undefined
+    methods: (config as CancelRequestConfig).methods != null
       ? (config as CancelRequestConfig).methods
       : defaults.methods,
   };
@@ -434,7 +430,7 @@ function normalizeRetryConfig(
     retryCondition: (config as RetryConfig).retryCondition ?? defaults.retryCondition,
     exponential: (config as RetryConfig).exponential ?? defaults.exponential,
     maxDelay: (config as RetryConfig).maxDelay ?? defaults.maxDelay,
-    methods: (config as RetryConfig).methods !== undefined
+    methods: (config as RetryConfig).methods != null
       ? (config as RetryConfig).methods
       : defaults.methods,
   };
@@ -719,7 +715,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       // ─────────────────────────────────────────────────────────────────────
       // 步骤 5.6：缓存破坏（所有请求加 _ 参数，key 已生成不受影响）
       // ─────────────────────────────────────────────────────────────────────
-      if (config.cacheBusting !== false && !(config as any).__cacheBustInjected) {
+      if (config.needCache !== false && !(config as any).__cacheBustInjected) {
         (config as any).__cacheBustInjected = true;
         const stamp = Date.now().toString(36);
         if (config.params instanceof URLSearchParams) {
