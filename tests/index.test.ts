@@ -875,3 +875,101 @@ describe('key 生成剔除 _ 参数', () => {
     expect(r2.status).toBe('fulfilled');
   }, 10000);
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// Token 认证测试
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Token 认证 (tokenAuth)', () => {
+  const mockToken = { token: 'refresh-xxx', accessToken: 'access-xxx' };
+  const mockNewToken = { token: 'new-refresh', accessToken: 'new-access' };
+
+  function createAuth(overrides: any = {}) {
+    return {
+      getLocalToken: () => mockToken,
+      refreshToken: async () => mockNewToken,
+      setLocalToken: () => {},
+      shouldRefreshToken: (err: any) => err?.response?.status === 401,
+      ...overrides,
+    };
+  }
+
+  it('getLocalToken 正常时注入 Authorization header', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth(),
+    });
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders.Authorization).toBe('Bearer access-xxx');
+  });
+
+  it('needToken: false 请求不注入 header', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth(),
+    });
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      needToken: false,
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders.Authorization).toBeUndefined();
+  });
+
+  it('实例级 needToken: false 全局关闭', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth(),
+      needToken: false,
+    });
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders.Authorization).toBeUndefined();
+  });
+
+  it('实例级 needToken: false 请求级 true 覆盖', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth(),
+      needToken: false,
+    });
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      needToken: true,
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders.Authorization).toBe('Bearer access-xxx');
+  });
+
+  it('自定义 headerName', async () => {
+    const instance = createEnhanceInstance({
+      baseURL: 'http://localhost',
+      tokenAuth: createAuth({ headerName: 'X-Auth-Token' }),
+    });
+    let capturedHeaders: any;
+    await instance.get('/test', null, {
+      adapter: (config: any) => {
+        capturedHeaders = config.headers;
+        return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+      },
+    });
+    expect(capturedHeaders['X-Auth-Token']).toBe('Bearer access-xxx');
+  });
+});
