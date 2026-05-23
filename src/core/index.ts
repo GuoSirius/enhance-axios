@@ -587,7 +587,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
             return instance.request(config);
           }
         } catch (err) {
-          tokenManager.clearPendingRefresh();
+          tokenManager.handleRefreshFailure(err);
           rejectAndCleanup(config, requestManager, pendingReturns, err);
           return Promise.reject(err);
         }
@@ -644,7 +644,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
             return instance.request(config);
           }
         } catch (err) {
-          tokenManager.clearPendingRefresh();
+          tokenManager.handleRefreshFailure(err);
           rejectAndCleanup(config, requestManager, pendingReturns, err);
           return Promise.reject(err);
         }

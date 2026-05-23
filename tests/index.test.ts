@@ -1011,6 +1011,8 @@ describe('Token 认证 (tokenAuth)', () => {
     });
 
     const makeReq = () => instance.get('/test', null, {
+      cancelRequest: false,
+      preventDuplicate: false,
       adapter: (config: any) => {
         if (config.headers.Authorization === 'Bearer access-xxx') {
           return Promise.reject({
@@ -1036,6 +1038,7 @@ describe('Token 认证 (tokenAuth)', () => {
       }),
     });
 
+    // 发一个带 token 的请求触发 401 → 刷新失败 → handler 调用
     await instance.get('/test', null, {
       adapter: () => Promise.reject({
         config: {}, isAxiosError: true, message: 'Unauthorized',
@@ -1043,8 +1046,9 @@ describe('Token 认证 (tokenAuth)', () => {
       }),
     }).catch(() => {});
 
-    expect(failureCalled.reason).toBe('refresh');
-    expect(failureCalled.msg).toBe('refresh failed');
+    expect(failureCalled).not.toBeNull();
+    expect(failureCalled?.reason).toBe('refresh');
+    expect(failureCalled?.msg).toBe('refresh failed');
   });
 
   it('headerFormat 字符串模板', async () => {

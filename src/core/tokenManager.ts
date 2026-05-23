@@ -101,7 +101,8 @@ export class TokenManager {
   }
 
   /** 刷新失败时调用 */
-  clearPendingRefresh(): void {
+  handleRefreshFailure(err: any): void {
     this.pendingRefresh = null;
+    (this.auth.tokenFailureHandler || defaultTokenFailure)('refresh', err);
   }
 }
