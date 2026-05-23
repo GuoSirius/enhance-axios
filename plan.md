@@ -75,11 +75,11 @@ enhance-axios/
 - `form` → URLSearchParams
 - `__dataTransformInjected` 标记防重入
 
-### 5. 缓存破坏 (needCache)
+### 5. 缓存破坏 (needCacheBust)
 - 所有方法自动追加 `_` 参数（时间戳）
 - key 生成时自动剔除 `_`，重试/防重复不受影响
-- `__cacheBustInjected` 标记防重入
-- 默认 true，仅 `needCache: false` 关闭
+- 重试时 `{ ...params, _: stamp }` 覆盖旧值，不累积
+- 默认 true，仅 `needCacheBust: false` 关闭
 
 ### 6. 配置归一化
 - 对象默认 `enabled: ?? true`（传入即 opt-in）

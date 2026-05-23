@@ -10,7 +10,7 @@
  *  2. 取消请求   (cancelRequest)    — 新请求到达时取消旧请求，始终保留最新
  *  3. 失败重试   (retry)            — HTTP 错误或业务码异常时自动重试
  *  4. 数据转换   (contentType)      — 根据 Content-Type 自动转换 data 格式
- *  5. 缓存破坏   (needCache)        — 所有请求追加 _ 参数防止缓存
+ *  5. 缓存破坏   (needCacheBust)        — 所有请求追加 _ 参数防止缓存
  *
  * ════════════════════════════════════════════════════════════════════════════════
  *                              默认策略
@@ -34,7 +34,7 @@
  *  1. 请求级配置覆盖实例级配置
  *  2. 请求级传入 object 默认 enabled: true（显式 opt-in）
  *  3. 快捷写法（string/function/number/array）暗含 enabled: true
- *  4. needCache 仅 false 关闭，其他值一律视为 true
+ *  4. needCacheBust 仅 false 关闭，其他值一律视为 true
  *  5. methods: undefined / null → 全部方法，methods: [] → 不应用
  *
  * ════════════════════════════════════════════════════════════════════════════════
@@ -560,6 +560,8 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
     Object.assign(defaultRetry, normalized);
   }
 
+  const needCacheBust = options.needCacheBust ?? true;
+
   // ─────────────────────────────────────────────────────────────────────────
   // 初始化请求管理器 和 延迟 Promise 存储
   // ─────────────────────────────────────────────────────────────────────────
@@ -705,7 +707,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 5.5：注入数据转换（file/form → transformRequest，json 由 axios 默认处理）
+      // 步骤 6：注入数据转换（file/form → transformRequest，json 由 axios 默认处理）
       // ─────────────────────────────────────────────────────────────────────
       const format = getDataFormat(config);
       if (format === 'file' || format === 'form') {
@@ -713,10 +715,9 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      // 步骤 5.6：缓存破坏（所有请求加 _ 参数，key 已生成不受影响）
+      // 步骤 7：缓存破坏（追加 _ 参数，key 生成后执行，stripCacheParam 自动剔除不影响 key）
       // ─────────────────────────────────────────────────────────────────────
-      if (config.needCache !== false && !(config as any).__cacheBustInjected) {
-        (config as any).__cacheBustInjected = true;
+      if ((config.needCacheBust ?? needCacheBust) !== false) {
         const stamp = Date.now().toString(36);
         if (config.params instanceof URLSearchParams) {
           config.params.append('_', stamp);

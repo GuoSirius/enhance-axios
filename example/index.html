@@ -143,7 +143,7 @@ button:active { transform: scale(0.95); }
     <div class="section">
       <div class="panel-title">全局</div>
       <div class="form-group"><label class="form-label">Content-Type</label><select id="contentType" class="form-input"><option value="json">json</option><option value="form">form</option><option value="file">file</option></select></div>
-      <div class="form-group"><label class="form-checkbox"><input type="checkbox" id="needcache-enabled" checked><span>缓存破坏 (_ 参数)</span></label></div>
+      <div class="form-group"><label class="form-checkbox"><input type="checkbox" id="needcachebust-enabled" checked><span>缓存破坏 (_ 参数)</span></label></div>
     </div>
     <button class="btn-primary" style="width:100%;margin-top:8px" onclick="rebuild()">重建实例</button>
   </div>
@@ -247,7 +247,7 @@ function rebuild() {
     baseURL: document.getElementById('baseUrl').value,
     timeout: parseInt(document.getElementById('timeout').value) || 5000,
     contentType: document.getElementById('contentType').value,
-    needCache: document.getElementById('needcache-enabled').checked,
+    needCacheBust: document.getElementById('needcachebust-enabled').checked,
     preventDuplicate: document.getElementById('prevent-enabled').checked ? {
       requestKey: '${method}-${url}',
       intervalMs: parseInt(document.getElementById('prevent-interval').value) || 2000,
@@ -267,7 +267,7 @@ function rebuild() {
     '<span class="' + (cfg.preventDuplicate ? 'info' : '') + '">防重复' + (cfg.preventDuplicate ? ' ✓' : ' ✗') + '</span> ' +
     '<span class="' + (cfg.cancelRequest ? 'warning' : '') + '">取消请求' + (cfg.cancelRequest ? ' ✓' : ' ✗') + '</span> ' +
     '<span class="' + (cfg.retry ? 'retry' : '') + '">重试' + (cfg.retry ? ' ✓' : ' ✗') + '</span> ' +
-    '<span class="' + (cfg.needCache ? 'info' : '') + '">缓存破坏' + (cfg.needCache ? ' ✓' : ' ✗') + '</span> ' +
+    '<span class="' + (cfg.needCacheBust ? 'info' : '') + '">缓存破坏' + (cfg.needCacheBust ? ' ✓' : ' ✗') + '</span> ' +
     '<span class="info">Content-Type: ' + cfg.contentType + '</span>');
 }
 

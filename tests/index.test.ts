@@ -546,7 +546,7 @@ describe('2xx 业务码重试', () => {
 // 缓存破坏测试（通过 mock adapter 验证实际行为）
 // ═══════════════════════════════════════════════════════════════════
 
-describe('缓存破坏 (needCache)', () => {
+describe('缓存破坏 (needCacheBust)', () => {
   function mockAdapter() {
     return (config: any) => Promise.resolve({
       data: { code: 0, data: { query: config.params } },
@@ -567,15 +567,15 @@ describe('缓存破坏 (needCache)', () => {
     expect(res.data.data.query._).toBeDefined();
   });
 
-  it('needCache: false 不添加 _', async () => {
-    const instance = createEnhanceInstance({ baseURL: 'http://localhost', needCache: false });
+  it('needCacheBust: false 不添加 _', async () => {
+    const instance = createEnhanceInstance({ baseURL: 'http://localhost', needCacheBust: false });
     const res = await instance.get('/test', null, { adapter: mockAdapter() });
     expect(res.data.data.query).toBeUndefined();
   });
 
-  it('请求级 needCache: false 可覆盖实例级', async () => {
+  it('请求级 needCacheBust: false 可覆盖实例级', async () => {
     const instance = createEnhanceInstance({ baseURL: 'http://localhost' });
-    const res = await instance.get('/test', null, { needCache: false, adapter: mockAdapter() });
+    const res = await instance.get('/test', null, { needCacheBust: false, adapter: mockAdapter() });
     expect(res.data.data.query).toBeUndefined();
   });
 
@@ -854,7 +854,7 @@ describe('key 生成剔除 _ 参数', () => {
 
     const [r1, r2] = await Promise.allSettled([
       makeRequest(1),
-      // 第二个请求在很短间隔后发出，needCache 给 params 加了 _
+      // 第二个请求在很短间隔后发出，needCacheBust 给 params 加了 _
       // 但 stripCacheParam 剔除了 _ → key 不变 → 防重复拦截 → 复用 deferred
       (async () => {
         await new Promise(r => setTimeout(r, 5));

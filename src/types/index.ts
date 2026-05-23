@@ -212,7 +212,7 @@ export interface CreateEnhanceOptions extends AxiosRequestConfig {
   /** 重试配置 */
   retry?: RetryOption;
   /** 所有请求自动添加 _ 参数防止缓存，默认 true，仅 false 关闭 */
-  needCache?: boolean;
+  needCacheBust?: boolean;
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -231,7 +231,7 @@ declare module 'axios' {
     /** 重试配置 */
     retry?: RetryOption;
     /** 所有请求自动添加 _ 参数防止缓存，默认 true，仅 false 关闭 */
-    needCache?: boolean;
+    needCacheBust?: boolean;
   }
 }
 
