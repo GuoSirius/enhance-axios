@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.1.1](https://github.com/GuoSirius/enhance-axios/compare/v1.1.0...v1.1.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* 修复 P0-P4 五个问题 ([c3de150](https://github.com/GuoSirius/enhance-axios/commit/c3de150dab72d5d5693e07260ede751b2e28dc51))
+
+
+### Documentation
+
+* update ([0485184](https://github.com/GuoSirius/enhance-axios/commit/0485184c4db05b9ecfcd0013fbd0f75212e82cd1))
+
 ## [1.1.0](https://github.com/GuoSirius/enhance-axios/compare/v1.0.4...v1.1.0) (2026-05-23)
 
 
