@@ -53,7 +53,11 @@ export function resolveTemplate(template: string, config: AxiosRequestConfig): s
   return template.replace(/\$\{([^}]+)\}/g, (_match, path) => {
     const value = getNestedValue(context, path);
     if (value == null) return '';
-    if (typeof value === 'object') return JSON.stringify(value);
+    if (typeof value === 'object') {
+      const str = JSON.stringify(value);
+      // 防止超大对象产生过长的模板结果（如 base64 文件内容）
+      return str.length > 512 ? hash(str) : str;
+    }
     return String(value);
   });
 }
@@ -75,15 +79,25 @@ export function generateDefaultKey(config: AxiosRequestConfig): string {
 }
 
 /**
- * 字符串哈希（FNV-1a 32-bit，兼容浏览器）
+ * 字符串哈希（cyrb53 — 53-bit，碰撞概率远低于 FNV-1a 32-bit）
+ *
+ * 基于 https://github.com/bryc/code/blob/master/jshash/README.md#cyrb53
+ * 返回 53-bit 正整数的 hex 字符串（最多 14 位），兼容浏览器。
  */
 export function hash(str: string): string {
-  let h = 0x811c9dc5;
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
   for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = (h * 0x01000193) >>> 0;
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
   }
-  return h.toString(16).padStart(8, '0');
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const result = 4294967296 * (2097151 & h2) + (h1 >>> 0);
+  return result.toString(16).padStart(8, '0');
 }
 
 /**

@@ -516,7 +516,9 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
         if (needsCancel) {
           const cancelKey = resolveRequestKey(config, cancel.requestKey);
           (config as any).__cancelKey = cancelKey;
-          requestManager.registerRequest(cancelKey, 'cancel', controller, Promise.resolve(), config);
+          // deferred 可能尚未创建（纯 cancel 场景无 prevent），用 undefined 占位
+          const cancelPromise = pendingReturns.get(cancelKey)?.promise;
+          requestManager.registerRequest(cancelKey, 'cancel', controller, cancelPromise ?? Promise.resolve(), config);
         }
 
         if (needsPrevent) {
@@ -553,7 +555,7 @@ function createEnhanceInstance(options: CreateEnhanceOptions = {}): AxiosInstanc
       if ((config.needCacheBust ?? needCacheBust) !== false) {
         const stamp = Date.now().toString(36);
         if (config.params instanceof URLSearchParams) {
-          config.params.append('_', stamp);
+          config.params.set('_', stamp);
         } else if (typeof config.params === 'object' && config.params !== null) {
           config.params = { ...config.params, _: stamp };
         } else {

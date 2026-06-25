@@ -12,6 +12,9 @@ import { getFormData } from '../utils';
 
 /** 检测当前请求的数据格式 */
 export function getDataFormat(config: AxiosRequestConfig): string | undefined {
+  // config.contentType 优先级高于 headers 中的 Content-Type
+  if (config.contentType) return config.contentType;
+
   const headers = config.headers || {};
   const ctKey = Object.keys(headers).find(k => k.toLowerCase() === 'content-type');
   if (ctKey) {
